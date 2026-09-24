@@ -1,0 +1,61 @@
+"""
+Thin wrapper around NVIDIA Nemotron on Nebius Token Factory.
+
+The model itself is stateless: every call starts from zero. Anything the
+agent "remembers" must be passed back in through the prompt. That memory
+lives in learner_profile.json (see profile_store.py), not in the model.
+"""
+
+import json
+import os
+import re
+
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+
+MODEL = "nvidia/nemotron-3-super-120b-a12b"
+
+_client = None
+
+
+def _get_client() -> OpenAI:
+    global _client
+    if _client is None:
+        api_key = os.environ.get("NEBIUS_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "NEBIUS_API_KEY is missing. Put it in a .env file next to app.py."
+            )
+        _client = OpenAI(
+            base_url="https://api.tokenfactory.nebius.com/v1/",
+            api_key=api_key,
+        )
+    return _client
+
+
+def ask(prompt: str, temperature: float = 0.4) -> str:
+    """Send one prompt, return the model's text reply."""
+    response = _get_client().chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+    )
+    text = response.choices[0].message.content or ""
+    # Some reasoning models wrap their thinking in <think> tags; drop it.
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+
+def ask_json(prompt: str, temperature: float = 0.4) -> dict:
+    """Ask for a JSON object and parse it. Retries once if parsing fails."""
+    for _ in range(2):
+        text = ask(prompt + "\n\nRespond with ONE valid JSON object and nothing else.",
+                   temperature)
+        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+    raise ValueError(f"Model did not return valid JSON. Last reply:\n{text}")

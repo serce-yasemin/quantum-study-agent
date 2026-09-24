@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 venv/
 .DS_Store
+
+# Personal learner data stays on your machine
+learner_profile.json
+test.txt

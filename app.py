@@ -1,53 +1,119 @@
 """
-Quantum Study Agent - starter script
+Quantum Study Agent - interactive study session (Week 2)
 Nebius x NVIDIA Global AI Hackathon 2026 - Personal AI track
 
-This calls NVIDIA Nemotron through Nebius Token Factory's
-OpenAI-compatible API. Once your Nebius Builder Program application
-is approved and you have an API key, put it in a .env file as:
+Usage:
+    python3 app.py --concept density_matrix --material test.txt
 
-    NEBIUS_API_KEY=your_key_here
-
-Then: pip install openai python-dotenv
+The agent climbs a difficulty ladder (recall -> apply -> transfer).
+Correct answer: move up one level. Wrong answer: read a short review
+page, then try a new question at the same level. Every attempt is saved
+to learner_profile.json so the next session can pick up where you left off.
 """
 
-import os
-from openai import OpenAI
-from dotenv import load_dotenv
+import argparse
+from pathlib import Path
 
-load_dotenv()
+import profile_store
+import tutor
 
-client = OpenAI(
-    base_url="https://api.tokenfactory.nebius.com/v1/",
-    api_key=os.environ.get("NEBIUS_API_KEY"),
-)
-
-MODEL = "nvidia/nemotron-3-super-120b-a12b"  # verify exact model id in your Nebius dashboard
+MIN_MATERIAL_CHARS = 200
+MAX_TRIES_PER_LEVEL = 2  # keeps a stuck session from burning API credits
 
 
-def summarize_and_quiz(text: str) -> str:
-    """Take a chunk of study material and return a summary + short quiz."""
-    prompt = f"""You are a patient physics/quantum computing tutor helping
-an undergraduate EEE student. Given the material below:
+def read_material(path: str) -> str:
+    file = Path(path)
+    if not file.exists():
+        raise SystemExit(f"Material file not found: {path}")
+    text = file.read_text(encoding="utf-8").strip()
+    if len(text) < MIN_MATERIAL_CHARS:
+        raise SystemExit(
+            f"{path} has only {len(text)} characters. Paste at least "
+            f"{MIN_MATERIAL_CHARS} characters of study material first "
+            "(no API call was made)."
+        )
+    return text
 
-1. Summarize the core ideas in plain language (5-8 sentences).
-2. Write 3 short quiz questions (with answers hidden below a
-   "---ANSWERS---" line) to help the student self-test.
 
-Material:
-\"\"\"
-{text}
-\"\"\"
-"""
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.choices[0].message.content
+def read_answer() -> str:
+    """Multi-line answer: finish with an empty line. Type 'quit' to stop."""
+    print("\nYour answer (press Enter on an empty line to submit, 'quit' to stop):")
+    lines = []
+    while True:
+        line = input()
+        if line.strip().lower() == "quit" and not lines:
+            return "quit"
+        if line == "" and lines:
+            break
+        if line != "":
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def run_session(concept_name: str, material: str) -> None:
+    profile = profile_store.load()
+    concept = profile_store.get_concept(profile, concept_name)
+
+    if concept["status"] == "mastered":
+        print(f"'{concept_name}' is already mastered. Starting a review at level 3.")
+        level = profile_store.MAX_LEVEL
+    else:
+        level = concept["level"] + 1
+
+    print(f"\n=== Studying: {concept_name} | starting at level {level} "
+          f"({tutor.DIFFICULTY_NAMES[level]}) ===")
+
+    tries = 0
+    while level <= profile_store.MAX_LEVEL:
+        weak_points = [h["weak_point"] for h in concept["history"] if h["weak_point"]]
+        print(f"\n--- Level {level}/3 ({tutor.DIFFICULTY_NAMES[level]}) ---")
+        question = tutor.generate_question(material, concept_name, level, weak_points)
+        print(f"\nQ: {question['question']}")
+
+        answer = read_answer()
+        if answer == "quit":
+            print("Session stopped. Progress so far is saved.")
+            break
+
+        result = tutor.grade_answer(question, answer)
+        profile_store.record_attempt(concept, level, result["correct"],
+                                     result.get("weak_point"))
+        profile_store.save(profile)
+
+        print(f"\n{'CORRECT' if result['correct'] else 'NOT YET'} - {result['feedback']}")
+
+        if result["correct"]:
+            level += 1
+            tries = 0
+            continue
+
+        tries += 1
+        print(f"\nModel answer: {question['expected_answer']}")
+        print("\n=== Review page ===")
+        print(tutor.review_page(material, concept_name, result.get("weak_point") or ""))
+
+        if tries >= MAX_TRIES_PER_LEVEL:
+            print(f"\nLet's stop here for today. '{concept_name}' is scheduled "
+                  f"for review on {concept['next_review']}.")
+            break
+        print("\nTry a new question at the same level.")
+
+    if concept["status"] == "mastered":
+        print(f"\n*** '{concept_name}' mastered! Next review: {concept['next_review']} ***")
+
+    profile_store.save(profile)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Quantum Study Agent")
+    parser.add_argument("--concept", required=True,
+                        help="concept name, e.g. density_matrix")
+    parser.add_argument("--material", required=True,
+                        help="path to a .txt file with the study material")
+    args = parser.parse_args()
+
+    run_session(args.concept, read_material(args.material))
 
 
 if __name__ == "__main__":
-    sample_text = (
-        "Paste a paragraph from a paper or lecture note here to test the agent."
-    )
-    print(summarize_and_quiz(sample_text))
+    main()

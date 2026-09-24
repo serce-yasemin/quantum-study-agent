@@ -1,47 +1,81 @@
 # Quantum Study Agent
 
-Nebius x NVIDIA Global AI Hackathon 2026 submission — Personal AI track.
+A personal, stateful study agent for learning quantum computing.
+Nebius x NVIDIA Global AI Hackathon 2026 — **Personal AI track**.
 
-## What it does
+## The problem
 
-A personal research/study assistant for learning quantum computing. Feed it a paper or lecture excerpt (e.g. from Prof. Mustecaplioglu's work on quantum thermodynamics), and it:
+Asking a chatbot to "quiz me" gives you a one-off quiz and then forgets you.
+It doesn't know what you got wrong last week, it never checks whether you
+actually did the reading, and it asks recall questions you can answer by
+re-reading the text.
 
-- Summarizes the core ideas at an undergraduate level
-- Generates a short quiz to self-test understanding
-- Answers follow-up questions about the material
+## What this agent does differently
 
-Built as a genuinely personal tool: I use it myself to study for the IBM Quantum Learning series and prep for my QuEST research position.
+- **Difficulty ladder** — questions climb from *recall* → *apply* (a small
+  calculation) → *transfer* (a situation not in the material). You only move
+  up when you answer correctly.
+- **Review pages** — when you get stuck, the agent names the exact gap
+  (e.g. "purity test tr(ρ²)") and writes a short focused review before you
+  try again.
+- **Memory that stays with you** — every attempt, weak point and review date
+  is saved to a local `learner_profile.json`. The model itself is stateless;
+  the agent's memory lives in this file, on your machine, and is never pushed
+  to GitHub.
+- **Spaced repetition** — mastered concepts come back for review after a few
+  days, missed ones sooner.
 
-## Why this track
+## Roadmap
 
-Runs entirely on Nebius Token Factory calling an NVIDIA open model (Nemotron) — no physical hardware required, which fits a Personal AI / software-agent submission.
+- [x] Week 1 — Nebius Token Factory + Nemotron connection
+- [x] Week 2 — interactive difficulty ladder, answer grading, learner profile
+- [ ] Week 3 — per-concept mastery tracking across sessions, session start review
+- [ ] Week 4 — assignments (book sections + web resources verified with search),
+      follow-up check questions, web UI
+- [ ] Week 5 — a week of real daily use; demo built from real progress data
 
 ## Tech stack
 
 - Python
-- Nebius Token Factory (OpenAI-compatible API)
-- NVIDIA Nemotron model
-
-## Status
-
-In progress — built during the Nebius x NVIDIA Global AI Hackathon (submissions through Oct 30, 2026).
+- NVIDIA Nemotron (`nvidia/nemotron-3-super-120b-a12b`) via Nebius Token Factory
+  (OpenAI-compatible API)
 
 ## Setup
 
 ```
-pip install openai python-dotenv
+pip3 install openai python-dotenv
 ```
 
 Create a `.env` file (never commit this):
+
 ```
 NEBIUS_API_KEY=your_key_here
 ```
 
-Run:
+## Run
+
+Paste at least 200 characters of study material into `test.txt`, then:
+
 ```
-python app.py
+python3 app.py --concept density_matrix --material test.txt
 ```
+
+Type your answer, then press Enter on an empty line to submit.
+Type `quit` to stop — progress is saved after every answer.
+
+## Project structure
+
+| File | Role |
+|---|---|
+| `app.py` | Study session loop (command line) |
+| `tutor.py` | Question generation, grading, review pages |
+| `profile_store.py` | Learner profile: load, save, difficulty ladder, review dates |
+| `llm.py` | Nemotron client and JSON parsing |
 
 ## Author
 
-Yasemin Serce — first-year EEE student, Koc University.
+Yasemin Serce — first-year EEE student, Koç University.
+
+## License
+
+MIT
