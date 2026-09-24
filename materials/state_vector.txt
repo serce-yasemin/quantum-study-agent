@@ -1,0 +1,41 @@
+Qubit state vectors: a short primer
+
+1. A qubit is a vector
+A qubit state is a column vector with two complex entries, called amplitudes:
+
+    |ψ⟩ = a|0⟩ + b|1⟩ = [a; b]
+
+The two basis states are |0⟩ = [1; 0] and |1⟩ = [0; 1]. The semicolon means
+"next row", so [a; b] is a column with a on top and b below.
+
+2. Normalization
+The amplitudes must satisfy |a|² + |b|² = 1. For a complex number z = x + iy,
+|z|² = z·z* = x² + y², where z* = x − iy is the complex conjugate.
+If a vector is not normalized, divide it by its length.
+Example: 3|0⟩ + 4i|1⟩ has length √(3² + 4²) = 5, so the normalized state is
+0.6|0⟩ + 0.8i|1⟩. Check: 0.36 + 0.64 = 1.
+
+3. Measurement probabilities (Born rule)
+Measuring in the computational basis gives 0 with probability P(0) = |a|² and
+1 with probability P(1) = |b|². For 0.6|0⟩ + 0.8i|1⟩: P(0) = 0.36, P(1) = 0.64.
+The i does not change the probability, because |0.8i|² = 0.64.
+
+4. Six states worth knowing
+    |+⟩  = (|0⟩ + |1⟩)/√2        |−⟩  = (|0⟩ − |1⟩)/√2
+    |+i⟩ = (|0⟩ + i|1⟩)/√2       |−i⟩ = (|0⟩ − i|1⟩)/√2
+together with |0⟩ and |1⟩. The four superpositions all give P(0) = P(1) = 0.5,
+yet they are four different states.
+
+5. Global phase and relative phase
+Multiplying the whole vector by e^(iγ) (a global phase) changes nothing that
+can be measured, so e^(iγ)|ψ⟩ is the same physical state as |ψ⟩.
+The relative phase between the two amplitudes does matter: it is what makes
+|+⟩ and |−⟩ different. Every qubit state can be written, up to a global phase,
+as |ψ⟩ = cos(θ/2)|0⟩ + e^(iφ)·sin(θ/2)|1⟩, where θ sets the probabilities and
+φ is the relative phase. Example: |−⟩ has θ = 90° and φ = 180°, since e^(iπ) = −1.
+
+6. Bras and inner products
+The bra ⟨ψ| is the conjugate transpose of |ψ⟩: a row [a*, b*].
+The inner product of |φ⟩ = [c; d] and |ψ⟩ = [a; b] is a single number:
+⟨φ|ψ⟩ = c*·a + d*·b. A normalized state has ⟨ψ|ψ⟩ = 1.
+Two states are orthogonal when ⟨φ|ψ⟩ = 0. Example: ⟨+|−⟩ = ½(1·1 + 1·(−1)) = 0.

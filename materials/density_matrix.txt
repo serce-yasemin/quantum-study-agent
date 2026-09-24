@@ -1,4 +1,4 @@
-Density matrices: a short primer for one qubit
+Density matrices of pure states: a short primer for one qubit
 
 1. From a state vector to a matrix
 A pure qubit state is a column vector |ψ⟩ = a|0⟩ + b|1⟩ with |a|² + |b|² = 1.
@@ -20,25 +20,23 @@ conjugates of each other. Their size |ρ₀₁| tells how much of a genuine
 superposition the state is; their angle carries the relative phase between |0⟩
 and |1⟩. If we write |ψ⟩ = a|0⟩ + b·e^(iφ)|1⟩ with real a, b ≥ 0, then
 ρ₀₁ = a·b·e^(−iφ), so the relative phase is φ = −arg(ρ₀₁) = arg(ρ₁₀).
+Example: |+i⟩ = (|0⟩ + i|1⟩)/√2 has φ = 90° and ρ = [[0.5, −0.5i], [0.5i, 0.5]].
 
-4. Mixed states
-Sometimes we do not know which pure state was prepared: with probability p it
-was |ψ₁⟩, with probability 1 − p it was |ψ₂⟩. The density matrix is the weighted
-average of the two pure density matrices:
+4. The global phase disappears
+If |ψ⟩ is multiplied by a global phase e^(iγ), the bra is multiplied by
+e^(−iγ), and the two cancel in |ψ⟩⟨ψ|. So the density matrix does not change:
+two vectors that differ only by a global phase give exactly the same ρ. This
+is one reason density matrices are a cleaner description than vectors.
 
-    ρ = p·|ψ₁⟩⟨ψ₁| + (1 − p)·|ψ₂⟩⟨ψ₂|
-
-Example: 0.6 of |0⟩ and 0.4 of |+⟩ gives
-ρ = 0.6·[[1, 0], [0, 0]] + 0.4·[[0.5, 0.5], [0.5, 0.5]] = [[0.8, 0.2], [0.2, 0.2]].
-Mixing always shrinks the coherences compared with a pure superposition.
-
-5. Pure or mixed? The purity test
-The purity is Tr(ρ²). It equals 1 for a pure state and is smaller than 1 for a
-mixed state. For one qubit its smallest value is 0.5, reached by the maximally
-mixed state ρ = I/2 = [[0.5, 0], [0, 0.5]], which has no coherence at all.
+5. Properties of a pure-state density matrix
+- Hermitian: ρ₁₀ = ρ₀₁*.
+- Tr(ρ) = 1 and the diagonal entries are between 0 and 1.
+- ρ² = ρ, because ρ is a projector: |ψ⟩⟨ψ|ψ⟩⟨ψ| = |ψ⟩⟨ψ|. Hence Tr(ρ²) = 1.
+- For a pure state, |ρ₀₁|² = ρ₀₀·ρ₁₁: the coherence is as large as it can be.
 
 6. Picture: the Bloch sphere
 Every one-qubit density matrix can be written ρ = ½(I + x·σx + y·σy + z·σz),
-where (x, y, z) is the Bloch vector. Pure states sit on the surface of the unit
-sphere (length 1); mixed states sit inside it (length < 1); the maximally mixed
-state is the centre. The purity is Tr(ρ²) = ½(1 + x² + y² + z²).
+where (x, y, z) is the Bloch vector. Reading it off the matrix:
+x = 2·Re(ρ₀₁), y = −2·Im(ρ₀₁), z = ρ₀₀ − ρ₁₁.
+For a pure state x² + y² + z² = 1, so it sits on the surface of the sphere.
+Example: |+i⟩ has ρ₀₁ = −0.5i, so (x, y, z) = (0, 1, 0).

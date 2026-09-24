@@ -1,0 +1,47 @@
+Mixed states and purity: a short primer for one qubit
+
+1. When we do not know the state
+Sometimes we do not know which pure state was prepared: with probability p it
+was |ψ₁⟩, with probability 1 − p it was |ψ₂⟩. No single state vector describes
+this situation, but a density matrix does. It is the weighted average of the
+two pure density matrices:
+
+    ρ = p·|ψ₁⟩⟨ψ₁| + (1 − p)·|ψ₂⟩⟨ψ₂|
+
+The same idea works for more than two states: weights pᵢ ≥ 0 that sum to 1.
+
+2. A worked example
+0.6 of |0⟩ and 0.4 of |+⟩ gives
+ρ = 0.6·[[1, 0], [0, 0]] + 0.4·[[0.5, 0.5], [0.5, 0.5]] = [[0.8, 0.2], [0.2, 0.2]].
+The result is still Hermitian with trace 1, so every measurement probability
+can be read from its diagonal: here P(0) = 0.8 and P(1) = 0.2.
+
+3. Mixture is not superposition
+The state |+⟩ and the 50/50 mixture of |0⟩ and |1⟩ both give P(0) = P(1) = 0.5.
+They are still different:
+    |+⟩⟨+|          = [[0.5, 0.5], [0.5, 0.5]]   (coherence 0.5)
+    ½|0⟩⟨0| + ½|1⟩⟨1| = [[0.5, 0],   [0,   0.5]]   (no coherence)
+The difference shows up in other measurements: measured in the |+⟩, |−⟩ basis,
+|+⟩ always gives "+", while the mixture gives "+" only half the time.
+Mixing always shrinks the coherences compared with a pure superposition.
+
+4. Pure or mixed? The purity test
+The purity is Tr(ρ²). It equals 1 for a pure state and is smaller than 1 for a
+mixed state. For one qubit its smallest value is 0.5, reached by the maximally
+mixed state ρ = I/2 = [[0.5, 0], [0, 0.5]], which has no coherence at all.
+Example: for ρ = [[0.8, 0.2], [0.2, 0.2]], ρ² = [[0.68, 0.2], [0.2, 0.08]], so
+Tr(ρ²) = 0.68 + 0.08 = 0.76 < 1: the state is mixed.
+
+5. Different mixtures, same matrix
+A 50/50 mixture of |0⟩ and |1⟩ and a 50/50 mixture of |+⟩ and |−⟩ give the same
+density matrix, I/2. Since every prediction comes from ρ, no experiment can
+tell these two preparations apart. The density matrix holds everything that
+can be measured, and nothing more.
+
+6. Picture: inside the Bloch sphere
+Every one-qubit density matrix can be written ρ = ½(I + x·σx + y·σy + z·σz),
+where (x, y, z) is the Bloch vector. Pure states sit on the surface of the unit
+sphere (length 1); mixed states sit inside it (length < 1); the maximally mixed
+state is the centre. The purity is Tr(ρ²) = ½(1 + x² + y² + z²).
+A mixture of two states lies on the straight line between their two Bloch
+vectors: the Bloch vector of p·ρ₁ + (1 − p)·ρ₂ is p·r₁ + (1 − p)·r₂.

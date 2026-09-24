@@ -1,0 +1,35 @@
+Outer products: from two vectors to a matrix
+
+1. Column times row
+An inner product ⟨φ|ψ⟩ (row times column) is a number. An outer product
+|ψ⟩⟨φ| (column times row) is a 2×2 matrix. With |ψ⟩ = [a; b] and
+|φ⟩ = [c; d], the bra ⟨φ| is the row [c*, d*], so
+
+    |ψ⟩⟨φ| = | a·c*   a·d* |
+             | b·c*   b·d* |
+
+Do not forget the complex conjugate on the bra side.
+
+2. The four basis matrices
+    |0⟩⟨0| = [[1, 0], [0, 0]]      |0⟩⟨1| = [[0, 1], [0, 0]]
+    |1⟩⟨0| = [[0, 0], [1, 0]]      |1⟩⟨1| = [[0, 0], [0, 1]]
+|i⟩⟨j| has a single 1 in row i, column j. Any 2×2 matrix M can be written as
+M = Σ Mᵢⱼ·|i⟩⟨j|, so these four are the building blocks of every matrix.
+
+3. How an outer product acts
+Applied to a vector |χ⟩, the outer product gives (|ψ⟩⟨φ|)|χ⟩ = |ψ⟩·⟨φ|χ⟩:
+it measures how much of |φ⟩ is in |χ⟩ and returns that much of |ψ⟩.
+Example: (|0⟩⟨1|)|1⟩ = |0⟩, while (|0⟩⟨1|)|0⟩ = 0.
+
+4. Projectors
+For a normalized state, P = |ψ⟩⟨ψ| is a projector: P·P = P, P|ψ⟩ = |ψ⟩, and
+P sends any state orthogonal to |ψ⟩ to zero.
+Example: |+⟩ = [1/√2; 1/√2] gives |+⟩⟨+| = [[0.5, 0.5], [0.5, 0.5]].
+Example with a complex amplitude: |+i⟩ = [1/√2; i/√2] gives
+|+i⟩⟨+i| = [[0.5, −0.5i], [0.5i, 0.5]], because the bra is [1/√2, −i/√2].
+
+5. Two useful facts
+Trace: Tr(|ψ⟩⟨φ|) = a·c* + b·d* = ⟨φ|ψ⟩, so Tr(|ψ⟩⟨ψ|) = ⟨ψ|ψ⟩ = 1.
+Adjoint: (|ψ⟩⟨φ|)† = |φ⟩⟨ψ|. So |ψ⟩⟨ψ| equals its own conjugate transpose
+(it is Hermitian): the entry below the diagonal is the complex conjugate of
+the entry above it.
