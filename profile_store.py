@@ -12,6 +12,7 @@ from pathlib import Path
 PROFILE_PATH = Path("learner_profile.json")
 
 MAX_LEVEL = 3  # 1 = recall, 2 = apply, 3 = transfer
+CORRECT_IN_A_ROW_TO_PASS = 2  # one lucky answer is not proof of understanding
 
 # Spaced repetition: how many days until the concept is asked again.
 REVIEW_AFTER_DAYS = {
@@ -34,18 +35,26 @@ def save(profile: dict) -> None:
 
 def get_concept(profile: dict, name: str) -> dict:
     """Return the concept record, creating an empty one the first time."""
-    return profile["concepts"].setdefault(name, {
+    concept = profile["concepts"].setdefault(name, {
         "prerequisites": [],
         "status": "learning",   # locked | learning | review | mastered
         "level": 0,             # highest difficulty passed (0-3)
+        "streak": 0,            # correct answers in a row at the current level
         "history": [],
         "next_review": None,
     })
+    concept.setdefault("streak", 0)  # profiles created before streaks existed
+    return concept
 
 
 def record_attempt(concept: dict, difficulty: int, correct: bool,
-                   weak_point: str | None) -> None:
-    """Log one answer and move the concept up (or not) the difficulty ladder."""
+                   weak_point: str | None) -> bool:
+    """Log one answer and move the concept up (or not) the difficulty ladder.
+
+    A level is passed only after CORRECT_IN_A_ROW_TO_PASS correct answers in a
+    row, so one lucky guess is not enough. A wrong answer resets the streak.
+    Returns True when this answer completed the level.
+    """
     today = date.today()
     concept["history"].append({
         "date": today.isoformat(),
@@ -54,8 +63,13 @@ def record_attempt(concept: dict, difficulty: int, correct: bool,
         "weak_point": weak_point,
     })
 
+    passed = False
     if correct:
-        concept["level"] = max(concept["level"], difficulty)
+        concept["streak"] += 1
+        if concept["streak"] >= CORRECT_IN_A_ROW_TO_PASS:
+            passed = True
+            concept["streak"] = 0
+            concept["level"] = max(concept["level"], difficulty)
         if concept["level"] >= MAX_LEVEL:
             concept["status"] = "mastered"
             days = REVIEW_AFTER_DAYS["mastered"]
@@ -63,7 +77,9 @@ def record_attempt(concept: dict, difficulty: int, correct: bool,
             concept["status"] = "learning"
             days = REVIEW_AFTER_DAYS["learning"]
     else:
+        concept["streak"] = 0
         concept["status"] = "review"
         days = REVIEW_AFTER_DAYS["wrong"]
 
     concept["next_review"] = (today + timedelta(days=days)).isoformat()
+    return passed

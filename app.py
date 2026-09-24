@@ -63,11 +63,16 @@ def run_session(concept_name: str, material: str) -> None:
     print(f"\n=== Studying: {concept_name} | starting at level {level} "
           f"({tutor.DIFFICULTY_NAMES[level]}) ===")
 
+    need = profile_store.CORRECT_IN_A_ROW_TO_PASS
     tries = 0
+    asked: list[str] = []
     while level <= profile_store.MAX_LEVEL:
         weak_points = [h["weak_point"] for h in concept["history"] if h["weak_point"]]
-        print(f"\n--- Level {level}/3 ({tutor.DIFFICULTY_NAMES[level]}) ---")
-        question = tutor.generate_question(material, concept_name, level, weak_points)
+        print(f"\n--- Level {level}/3 ({tutor.DIFFICULTY_NAMES[level]}) | "
+              f"streak {concept['streak']}/{need} ---")
+        question = tutor.generate_question(material, concept_name, level,
+                                           weak_points, asked)
+        asked.append(question["question"])
         print(f"\nQ: {question['question']}")
 
         answer = read_answer()
@@ -76,15 +81,20 @@ def run_session(concept_name: str, material: str) -> None:
             break
 
         result = tutor.grade_answer(question, answer)
-        profile_store.record_attempt(concept, level, result["correct"],
-                                     result.get("weak_point"))
+        passed = profile_store.record_attempt(concept, level, result["correct"],
+                                              result.get("weak_point"))
         profile_store.save(profile)
 
         print(f"\n{'CORRECT' if result['correct'] else 'NOT YET'} - {result['feedback']}")
 
         if result["correct"]:
-            level += 1
-            tries = 0
+            if passed:
+                print(f"\n>>> Level {level} passed ({need} correct in a row).")
+                level += 1
+                tries = 0
+            else:
+                left = need - concept["streak"]
+                print(f"\n{left} more correct in a row to pass level {level}.")
             continue
 
         tries += 1

@@ -13,8 +13,10 @@ re-reading the text.
 ## What this agent does differently
 
 - **Difficulty ladder** — questions climb from *recall* → *apply* (a small
-  calculation) → *transfer* (a situation not in the material). You only move
-  up when you answer correctly.
+  calculation) → *transfer* (a situation not in the material). You move up
+  only after **2 correct answers in a row** at a level — one lucky answer is
+  not proof of understanding. Each new question tests the idea from a
+  different angle, never repeating one already asked.
 - **Review pages** — when you get stuck, the agent names the exact gap
   (e.g. "purity test tr(ρ²)") and writes a short focused review before you
   try again.

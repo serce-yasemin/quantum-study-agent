@@ -17,13 +17,19 @@ DIFFICULTY_RULES = {
 
 
 def generate_question(material: str, concept: str, difficulty: int,
-                      weak_points: list[str]) -> dict:
+                      weak_points: list[str],
+                      previous_questions: list[str] | None = None) -> dict:
     """Return {"question", "expected_answer", "key_points"}."""
     focus = ""
     if weak_points:
         focus = ("The learner previously struggled with: "
                  + "; ".join(weak_points[-3:])
                  + ". If relevant, target that gap.")
+    if previous_questions:
+        focus += ("\nAlready asked this session - do NOT repeat or closely "
+                  "paraphrase these; test the idea from a different angle "
+                  "or with different numbers:\n- "
+                  + "\n- ".join(previous_questions[-5:]))
 
     prompt = f"""You are a patient quantum computing tutor for an undergraduate
 electrical engineering student. The current concept is "{concept}".
