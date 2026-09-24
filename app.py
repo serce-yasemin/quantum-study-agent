@@ -25,6 +25,7 @@ import random
 from pathlib import Path
 
 import curriculum
+import homework
 import profile_store
 import tutor
 
@@ -108,6 +109,7 @@ def run_session(concept_name: str, material: str, max_questions: int,
     asked: list[str] = []
     lesson_shown_for = None
     objective = None
+    session_weak = None
 
     while level <= profile_store.MAX_LEVEL:
         if len(asked) >= max_questions:
@@ -150,6 +152,7 @@ def run_session(concept_name: str, material: str, max_questions: int,
             continue
 
         tries += 1
+        session_weak = result.get("weak_point") or session_weak
         print(f"\nModel answer: {question['expected_answer']}")
         print("\n=== Review page ===")
         print(tutor.review_page(material, concept_name,
@@ -167,7 +170,26 @@ def run_session(concept_name: str, material: str, max_questions: int,
             for opened in curriculum.newly_unlocked(profile, concept_name):
                 print(f"*** Unlocked: {curriculum.BY_ID[opened]['title']} ***")
 
+    if asked:
+        print_homework(homework.create(profile, concept_name, title_of(concept_name),
+                                       material, session_weak))
     profile_store.save(profile)
+
+
+def title_of(concept_name: str) -> str:
+    step = curriculum.BY_ID.get(concept_name)
+    return step["title"] if step else concept_name
+
+
+def print_homework(a: dict) -> None:
+    print("\n=== Homework ===")
+    print(a["task"])
+    if a["book"]:
+        print(f"  Book: {a['book']['section']}, pp. {a['book']['pages']} - {a['book']['book']}")
+    for link in a["links"]:
+        print(f"  Web:  {link['title']} - {link['url']} (link checked {link['checked_on']})")
+    if a["web_search"] != "ok":
+        print(f"  ({a['web_search']})")
 
 
 def main() -> None:

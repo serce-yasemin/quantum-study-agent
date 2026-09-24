@@ -26,7 +26,7 @@ st.set_page_config(page_title="Quantum Study Agent", page_icon="⚛️", layout=
 
 # Secrets from Streamlit Cloud -> environment, before the LLM client is created.
 try:
-    for key in ("NEBIUS_API_KEY",):
+    for key in ("NEBIUS_API_KEY", "TAVILY_API_KEY"):
         if key in st.secrets and not os.environ.get(key):
             os.environ[key] = st.secrets[key]
     ACCESS_CODE = st.secrets.get("ACCESS_CODE")
@@ -34,6 +34,7 @@ except Exception:            # no secrets file when running locally
     ACCESS_CODE = None
 
 import curriculum  # noqa: E402  (after env setup)
+import homework  # noqa: E402
 import profile_store  # noqa: E402
 import quantum_viz as qv  # noqa: E402
 import tutor  # noqa: E402
@@ -175,6 +176,28 @@ def path_overview() -> None:
             st.caption(f"{ICONS[state]} {LABELS[state]} · level {level}/3")
 
 
+def concept_title(concept: str) -> str:
+    return curriculum.BY_ID[concept]["title"] if concept in curriculum.BY_ID else concept
+
+
+def show_assignment(a: dict) -> None:
+    """One homework card: what to do, the book section, the checked links."""
+    with st.container(border=True):
+        st.markdown(f"**{concept_title(a['concept'])}** · given {a['created']}"
+                    + (f" · gap: *{a['weak_point']}*" if a.get("weak_point") else ""))
+        st.write(a["task"])
+        if a.get("book"):
+            b = a["book"]
+            st.markdown(f"📖 **{b['section']}**, pp. {b['pages']}  \n{b['book']}")
+        for link in a.get("links", []):
+            st.markdown(f"🔗 [{link['title']}]({link['url']}) "
+                        f"· ✓ link checked {link['checked_on']}")
+        if not a.get("links") and a.get("web_search", "ok") != "ok":
+            st.caption(f"Web resources: {a['web_search']}.")
+        st.caption("When you have done it, the agent will ask you two short "
+                   "check questions about it.")
+
+
 def call(fn, *args):
     """Run an LLM step with a spinner; show a friendly error instead of a trace."""
     try:
@@ -240,6 +263,7 @@ with tab_study:
                            "(no API call was made).")
                 st.stop()
             ss.concept, ss.material = concept, material
+            ss.session_weak, ss.homework = None, None
             c = concept_record()
             if concept in curriculum.BY_ID:
                 c["prerequisites"] = curriculum.BY_ID[concept]["prerequisites"]
@@ -283,6 +307,7 @@ with tab_study:
                 ss.review = None
                 if not result["correct"]:
                     ss.wrong_this_level += 1
+                    ss.session_weak = result.get("weak_point") or ss.session_weak
                     ss.review = call(tutor.review_page, ss.material, ss.concept,
                                      result.get("weak_point") or "", ss.question, answer)
                 ss.stage = "feedback"
@@ -344,6 +369,18 @@ with tab_study:
         elif ss.stage == "done":
             st.subheader("Session finished")
             st.info(ss.end_reason)
+            if ss.get("homework") is None:
+                try:
+                    with st.spinner("Preparing your homework (checking every link)…"):
+                        ss.homework = homework.create(ss.profile, ss.concept,
+                                                      concept_title(ss.concept),
+                                                      ss.material, ss.session_weak)
+                except Exception as exc:
+                    ss.homework = {}
+                    st.warning(f"Could not prepare homework this time: {exc}")
+            if ss.homework:
+                st.subheader("📚 Your homework")
+                show_assignment(ss.homework)
             st.write("Your progress is in the 🗂️ **My progress** tab - download it "
                      "to keep it.")
             if st.button("Start a new session"):
@@ -377,6 +414,14 @@ with tab_profile:
                 st.caption("Gaps found so far: " + "; ".join(dict.fromkeys(weak)))
     else:
         st.caption("No sessions yet.")
+
+    tasks = ss.profile.get("assignments", [])
+    if tasks:
+        st.subheader("Homework")
+        for a in reversed(tasks):
+            with st.expander(f"#{a['id']} · {concept_title(a['concept'])} · "
+                             f"{a['created']} · {a['status']}"):
+                show_assignment(a)
 
     st.download_button("Download my profile (JSON)",
                        json.dumps(ss.profile, indent=2, ensure_ascii=False),

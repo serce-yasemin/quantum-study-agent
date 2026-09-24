@@ -37,6 +37,15 @@ re-reading the text.
 - **Review pages** — when you get stuck, the agent names the exact gap
   (e.g. "purity test tr(ρ²)") and writes a short focused review before you
   try again.
+- **Homework with real, checked resources** — every session ends with a short
+  assignment tied to the gap the agent found. Resources cannot be invented by
+  the model: book sections come from a fixed list checked against the book's
+  table of contents (Nielsen & Chuang), and web resources are found live with
+  the **Tavily Search API**, restricted to trusted educational sites
+  (Wikipedia, IBM Quantum Learning, PennyLane, arXiv, university courses, …).
+  Our own code then opens every link and keeps only the ones that load. The
+  model only *picks* from these lists by number. Each assignment stores two
+  check questions for later.
 - **Memory that stays with you** — every attempt, weak point and review date
   is saved to a local `learner_profile.json`. The model itself is stateless;
   the agent's memory lives in this file, on your machine, and is never pushed
@@ -54,14 +63,16 @@ re-reading the text.
       learner profile, access code to protect API credits
 - [x] Week 3 (part 2) — learning path that starts from the basics
       (4 steps, unlock-on-mastery, "what to study now" recommendation)
-- [ ] Week 4 — assignments (book sections + web resources verified with search),
-      follow-up check questions, session start review
+- [x] Week 4 (part 1) — homework: checked book sections + Tavily web search on
+      trusted sites + code-verified links
+- [ ] Week 4 (part 2) — follow-up check questions, session start review
 - [ ] Week 5 — a week of real daily use; demo built from real progress data
 
 ## Tech stack
 
 - Python
 - Streamlit, Plotly, NumPy
+- Tavily Search API (web resources for homework)
 - NVIDIA Nemotron (`nvidia/nemotron-3-super-120b-a12b`) via Nebius Token Factory
   (OpenAI-compatible API)
 
@@ -75,6 +86,7 @@ Create a `.env` file (never commit this):
 
 ```
 NEBIUS_API_KEY=your_key_here
+TAVILY_API_KEY=tvly-...   # optional, for web resources in homework
 ```
 
 ## Run the web app
@@ -88,8 +100,11 @@ On Streamlit Community Cloud, add two secrets (Settings → Secrets):
 
 ```
 NEBIUS_API_KEY = "your_key_here"
+TAVILY_API_KEY = "tvly-..."
 ACCESS_CODE = "a code you give to the judges"
 ```
+
+`TAVILY_API_KEY` is optional: without it, homework uses the book list only.
 
 The access code keeps strangers from spending the API credits on the public
 demo. Locally, without secrets, the app opens directly.
@@ -130,6 +145,8 @@ checked without typing. It uses the real API and saves to a separate
 |---|---|
 | `streamlit_app.py` | Web app: Explore / Study / My progress tabs |
 | `quantum_viz.py` | Exact qubit math + Bloch sphere and heat-map figures |
+| `homework.py` | Builds the end-of-session assignment and saves it to the profile |
+| `resources.py` | Checked book sections, Tavily search on trusted sites, link checking |
 | `curriculum.py` | Learning path: step order, unlocking, what to study now |
 | `materials/*.txt` | Built-in primers, one per path step |
 | `app.py` | Study session loop (command line) |

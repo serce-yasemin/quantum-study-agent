@@ -227,3 +227,67 @@ Question: {question["question"]}
 
 Write only the student's answer, in plain text."""
     return ask(prompt, temperature=0.8)
+
+
+def make_assignment(material: str, concept: str, weak_point: str | None,
+                    books: list[dict], links: list[dict]) -> dict:
+    """Homework for after the session.
+
+    The model never writes a reference itself: it only PICKS a book section
+    and web links by number from lists our code built (a checked book list,
+    and links our code opened). Returns
+    {"book": int | None, "links": [int], "task": str,
+     "check_questions": [{"question", "expected_answer"}]}.
+    The check questions are saved now and asked when the learner says the
+    homework is done.
+    """
+    book_list = "\n".join(f"{i}. {b['section']} (pp. {b['pages']}) - {b['focus']}"
+                          for i, b in enumerate(books)) or "(none)"
+    link_list = "\n".join(f"{i}. {l['title']} - {l['url']}\n   {l['snippet']}"
+                          for i, l in enumerate(links)) or "(none)"
+    gap = (f'In today\'s session the learner struggled with: "{weak_point}".'
+           if weak_point else "The learner made no mistakes today - deepen the topic.")
+
+    prompt = f"""You are a quantum computing tutor setting short homework on "{concept}".
+{gap}
+
+Pick resources ONLY from these numbered lists. Never invent a book, section,
+page or URL.
+
+Book sections:
+{book_list}
+
+Web resources (already checked - they exist and load):
+{link_list}
+
+Return JSON only:
+- "book": the number of the best book section, or null if the list is empty
+- "links": a list of 0-2 numbers of the most useful web resources
+- "task": 2-3 sentences telling the learner exactly what to read or watch and
+  what to pay attention to (tie it to today's gap if there is one). About
+  20-30 minutes of work.
+- "check_questions": exactly 2 objects {{"question", "expected_answer"}} that
+  someone who did the homework can answer in 1-3 lines. They must be answerable
+  from the study material below plus the homework - no new techniques.
+
+{CONVENTIONS}
+
+Formatting: plain text only. No LaTeX, no Markdown. Use Unicode symbols
+(ρ, ψ, ⟨ ⟩, ², √).
+
+Study material:
+\"\"\"
+{material}
+\"\"\"
+"""
+    raw = ask_json(prompt, temperature=0.3)
+
+    # Keep only choices that point into our lists - drop anything else.
+    book = raw.get("book")
+    book = book if isinstance(book, int) and 0 <= book < len(books) else (0 if books else None)
+    chosen = [i for i in raw.get("links") or [] if isinstance(i, int) and 0 <= i < len(links)]
+    checks = [q for q in raw.get("check_questions") or []
+              if isinstance(q, dict) and q.get("question") and q.get("expected_answer")]
+    return {"book": book, "links": list(dict.fromkeys(chosen))[:2],
+            "task": str(raw.get("task") or "").strip(),
+            "check_questions": checks[:2]}
