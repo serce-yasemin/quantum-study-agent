@@ -17,6 +17,12 @@ re-reading the text.
   with a slider and watch the mixture move along the straight line between
   them, inside the sphere, while the coherence and purity drop live. These
   numbers are computed exactly (numpy), not by the AI.
+- **A learning path that starts from the basics** — state vectors → outer
+  products → pure-state density matrices → mixed states. Each step has its own
+  short built-in primer. A step unlocks when the one before it is mastered
+  (all three levels passed): unlocking the next step is the reward. The agent
+  recommends what to study now — a due review first, otherwise the next step
+  on your path. Already know the basics? Turn on "skip ahead".
 - **Teach first, then ask** — each level opens with a short lesson card
   (max ~120 words, one idea, one tiny worked example, matrices drawn as text
   grids). It assumes you have *not* read the material yet.
@@ -46,7 +52,8 @@ re-reading the text.
 - [x] Week 3 (part 1) — Streamlit web app: Explore tab (Bloch sphere, heat
       map, live mixing slider), Study tab (full tutor loop), downloadable
       learner profile, access code to protect API credits
-- [ ] Week 3 (part 2) — learning path that starts from the basics
+- [x] Week 3 (part 2) — learning path that starts from the basics
+      (4 steps, unlock-on-mastery, "what to study now" recommendation)
 - [ ] Week 4 — assignments (book sections + web resources verified with search),
       follow-up check questions, session start review
 - [ ] Week 5 — a week of real daily use; demo built from real progress data
@@ -89,10 +96,17 @@ demo. Locally, without secrets, the app opens directly.
 
 ## Run in the terminal
 
-Paste at least 200 characters of study material into `test.txt`, then:
+Follow the learning path (the agent picks the step):
 
 ```
-python3 app.py --concept density_matrix --material test.txt
+python3 app.py
+python3 app.py --concept outer_product        # or choose a step yourself
+```
+
+Or study your own text — paste at least 200 characters into `test.txt`:
+
+```
+python3 app.py --concept my_topic --material test.txt
 ```
 
 Type your answer, then press Enter on an empty line to submit.
@@ -116,7 +130,8 @@ checked without typing. It uses the real API and saves to a separate
 |---|---|
 | `streamlit_app.py` | Web app: Explore / Study / My progress tabs |
 | `quantum_viz.py` | Exact qubit math + Bloch sphere and heat-map figures |
-| `materials/density_matrix.txt` | Built-in study primer |
+| `curriculum.py` | Learning path: step order, unlocking, what to study now |
+| `materials/*.txt` | Built-in primers, one per path step |
 | `app.py` | Study session loop (command line) |
 | `tutor.py` | Question generation, grading, review pages |
 | `profile_store.py` | Learner profile: load, save, difficulty ladder, review dates |

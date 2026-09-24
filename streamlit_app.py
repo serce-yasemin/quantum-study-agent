@@ -4,11 +4,13 @@ Nebius x NVIDIA Global AI Hackathon 2026 - Personal AI track
 
 Run locally:   streamlit run streamlit_app.py
 
-Two tabs:
+Three tabs:
 - Explore: an exact, interactive picture of one-qubit states (Bloch sphere +
   density-matrix heat map). No AI involved - every number is computed.
 - Study: the AI tutor loop (lesson -> questions -> grading -> review pages),
-  backed by NVIDIA Nemotron on Nebius Token Factory.
+  backed by NVIDIA Nemotron on Nebius Token Factory. A learning path starts
+  from the basics (state vectors) and unlocks each step after the one before.
+- My progress: the learner profile - download it, upload it next time.
 
 The learner profile lives in this browser session and can be downloaded as
 JSON - your learning data stays under your control.
@@ -16,7 +18,6 @@ JSON - your learning data stays under your control.
 
 import json
 import os
-from pathlib import Path
 
 import numpy as np
 import streamlit as st
@@ -32,11 +33,11 @@ try:
 except Exception:            # no secrets file when running locally
     ACCESS_CODE = None
 
-import profile_store  # noqa: E402  (after env setup)
+import curriculum  # noqa: E402  (after env setup)
+import profile_store  # noqa: E402
 import quantum_viz as qv  # noqa: E402
 import tutor  # noqa: E402
 
-MATERIALS_DIR = Path(__file__).parent / "materials"
 MAX_QUESTIONS = 5
 MAX_WRONG_PER_LEVEL = 2
 NEED = profile_store.CORRECT_IN_A_ROW_TO_PASS
@@ -155,10 +156,23 @@ def concept_record():
     return profile_store.get_concept(ss.profile, ss.concept)
 
 
-def load_material() -> str:
-    if ss.get("material_choice") == "Paste my own text":
-        return ss.get("own_text", "").strip()
-    return (MATERIALS_DIR / "density_matrix.txt").read_text(encoding="utf-8")
+OWN = "✍️ My own material"
+ICONS = {"locked": "🔒", "new": "⬜", "learning": "📘",
+         "review_due": "🔁", "mastered": "✅"}
+LABELS = {"locked": "locked", "new": "not started", "learning": "in progress",
+          "review_due": "review due", "mastered": "mastered"}
+
+
+def path_overview() -> None:
+    """The learning path as a row of cards: basics first, each unlocks the next."""
+    cols = st.columns(len(curriculum.PATH))
+    for i, (col, step) in enumerate(zip(cols, curriculum.PATH)):
+        state = curriculum.status(ss.profile, step["id"])
+        rec = ss.profile["concepts"].get(step["id"])
+        level = rec["level"] if rec else 0
+        with col.container(border=True):
+            st.markdown(f"**{i + 1}. {step['title']}**")
+            st.caption(f"{ICONS[state]} {LABELS[state]} · level {level}/3")
 
 
 def call(fn, *args):
@@ -200,21 +214,36 @@ with tab_study:
                  "**recall → apply → transfer**. Pass a level with "
                  f"**{NEED} correct answers in a row**. Max {MAX_QUESTIONS} questions "
                  "per session - come back tomorrow for the rest.")
-        ss.concept = st.text_input("Concept", "density_matrix")
-        ss.material_choice = st.radio("Study material",
-                                      ["Built-in primer: density matrices",
-                                       "Paste my own text"], horizontal=True)
-        if ss.material_choice == "Paste my own text":
-            ss.own_text = st.text_area("Paste a paragraph from a paper or lecture notes",
-                                       height=180)
+        st.markdown("#### Your learning path")
+        path_overview()
+        rec_id, reason = curriculum.recommend(ss.profile)
+        st.info(f"**Recommended now:** {curriculum.BY_ID[rec_id]['title']} - {reason}.")
+
+        skip = st.toggle("Let me pick any step (skip ahead)",
+                         help="Locked steps open when the step before them is "
+                              "mastered. Turn this on if you already know the basics.")
+        options = [s["id"] for s in curriculum.PATH
+                   if skip or curriculum.is_unlocked(ss.profile, s["id"])] + [OWN]
+        choice = st.selectbox(
+            "What do you want to study?", options, index=options.index(rec_id),
+            format_func=lambda c: c if c == OWN else curriculum.BY_ID[c]["title"])
+        if choice == OWN:
+            concept = st.text_input("Concept name", "my_topic")
+            material = st.text_area("Paste a paragraph from a paper or lecture notes",
+                                    height=180).strip()
+        else:
+            concept, material = choice, curriculum.material(choice)
+
         if st.button("Start session", type="primary"):
-            material = load_material()
             if len(material) < 200:
                 st.warning("Please paste at least 200 characters of material "
                            "(no API call was made).")
                 st.stop()
-            ss.material = material
+            ss.concept, ss.material = concept, material
             c = concept_record()
+            if concept in curriculum.BY_ID:
+                c["prerequisites"] = curriculum.BY_ID[concept]["prerequisites"]
+            ss.was_mastered = c["level"] >= profile_store.MAX_LEVEL
             ss.level = profile_store.MAX_LEVEL if c["status"] == "mastered" else c["level"] + 1
             ss.asked = []
             start_level()
@@ -298,7 +327,13 @@ with tab_study:
                                      f"today. Next review: {c['next_review']}.")
                 elif action == "mastered":
                     ss.stage = "done"
-                    ss.end_reason = f"'{ss.concept}' mastered! Next review: {c['next_review']}."
+                    title = curriculum.BY_ID.get(ss.concept, {}).get("title", ss.concept)
+                    ss.end_reason = f"'{title}' mastered! Next review: {c['next_review']}."
+                    opened = ([] if ss.was_mastered else
+                              curriculum.newly_unlocked(ss.profile, ss.concept))
+                    if opened:
+                        ss.end_reason += " 🔓 Unlocked: " + ", ".join(
+                            curriculum.BY_ID[o]["title"] for o in opened) + "."
                 elif action == "level":
                     ss.level += 1
                     start_level()
@@ -324,12 +359,16 @@ with tab_profile:
              "It lives only in this browser session; download it to keep it, "
              "upload it next time to continue.")
     concepts = ss.profile["concepts"]
+    order = [s["id"] for s in curriculum.PATH]
     if concepts:
-        for name, rec in concepts.items():
+        for name, rec in sorted(concepts.items(),
+                                key=lambda kv: order.index(kv[0]) if kv[0] in order
+                                else len(order)):
             total = len(rec["history"])
             right = sum(h["correct"] for h in rec["history"])
             cols = st.columns(4)
-            cols[0].metric("Concept", name)
+            title = curriculum.BY_ID[name]["title"] if name in curriculum.BY_ID else name
+            cols[0].metric("Concept", title)
             cols[1].metric("Level passed", f"{rec['level']}/3")
             cols[2].metric("Answers correct", f"{right}/{total}")
             cols[3].metric("Next review", rec["next_review"] or "—")

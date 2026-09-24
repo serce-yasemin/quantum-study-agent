@@ -3,6 +3,8 @@ Quantum Study Agent - interactive study session
 Nebius x NVIDIA Global AI Hackathon 2026 - Personal AI track
 
 Usage:
+    python3 app.py                                   # follow the learning path
+    python3 app.py --concept outer_product           # a step of the path
     python3 app.py --concept density_matrix --material test.txt
     python3 app.py --concept density_matrix --material test.txt --simulate mixed
 
@@ -22,6 +24,7 @@ import argparse
 import random
 from pathlib import Path
 
+import curriculum
 import profile_store
 import tutor
 
@@ -87,6 +90,9 @@ def run_session(concept_name: str, material: str, max_questions: int,
                 simulate: str | None) -> None:
     profile = profile_store.load()
     concept = profile_store.get_concept(profile, concept_name)
+    if concept_name in curriculum.BY_ID:
+        concept["prerequisites"] = curriculum.BY_ID[concept_name]["prerequisites"]
+    was_mastered = concept["level"] >= profile_store.MAX_LEVEL
 
     if concept["status"] == "mastered":
         print(f"'{concept_name}' is already mastered. Starting a review at level 3.")
@@ -157,16 +163,21 @@ def run_session(concept_name: str, material: str, max_questions: int,
 
     if concept["status"] == "mastered":
         print(f"\n*** '{concept_name}' mastered! Next review: {concept['next_review']} ***")
+        if not was_mastered:
+            for opened in curriculum.newly_unlocked(profile, concept_name):
+                print(f"*** Unlocked: {curriculum.BY_ID[opened]['title']} ***")
 
     profile_store.save(profile)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Quantum Study Agent")
-    parser.add_argument("--concept", required=True,
-                        help="concept name, e.g. density_matrix")
-    parser.add_argument("--material", required=True,
-                        help="path to a .txt file with the study material")
+    parser.add_argument("--concept",
+                        help="concept name, e.g. density_matrix (default: the "
+                             "step the learning path recommends)")
+    parser.add_argument("--material",
+                        help="path to a .txt file with the study material "
+                             "(default: the built-in primer for a path step)")
     parser.add_argument("--max-questions", type=int, default=DEFAULT_MAX_QUESTIONS,
                         help=f"questions per session (default {DEFAULT_MAX_QUESTIONS})")
     parser.add_argument("--simulate", choices=["strong", "weak", "mixed"],
@@ -180,8 +191,19 @@ def main() -> None:
         print("*** TEST MODE: simulated student, saving to "
               "learner_profile.simulated.json ***")
 
-    run_session(args.concept, read_material(args.material),
-                args.max_questions, args.simulate)
+    concept = args.concept
+    if concept is None:
+        concept, reason = curriculum.recommend(profile_store.load())
+        print(f"Learning path: {curriculum.BY_ID[concept]['title']} - {reason}.")
+    if args.material:
+        material = read_material(args.material)
+    elif concept in curriculum.BY_ID:
+        material = curriculum.material(concept)
+    else:
+        raise SystemExit(f"'{concept}' is not a step of the learning path - "
+                         "pass --material with your own study text.")
+
+    run_session(concept, material, args.max_questions, args.simulate)
 
 
 if __name__ == "__main__":
