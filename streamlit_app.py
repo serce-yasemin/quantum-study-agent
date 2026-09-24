@@ -230,7 +230,7 @@ with tab_study:
         if ss.stage == "lesson":
             st.subheader(f"Lesson · {tutor.DIFFICULTY_NAMES[ss.level]}")
             st.success(f"**Goal:** {ss.objective}")
-            st.code(ss.lesson, language=None)
+            st.code(ss.lesson, language=None, wrap_lines=True)
             st.caption("Tip: open the 🔭 Explore tab to see any matrix from this "
                        "lesson on the Bloch sphere.")
             if st.button("I'm ready - ask me", type="primary"):
@@ -268,9 +268,9 @@ with tab_study:
             else:
                 st.error(f"Not yet - {ss.result['feedback']}")
                 with st.expander("Model answer"):
-                    st.code(ss.question["expected_answer"], language=None)
+                    st.code(ss.question["expected_answer"], language=None, wrap_lines=True)
                 st.subheader("Review page")
-                st.code(ss.review, language=None)
+                st.code(ss.review, language=None, wrap_lines=True)
 
             if ss.passed:
                 st.balloons()

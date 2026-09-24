@@ -93,7 +93,8 @@ Return JSON with these keys:
 {CONVENTIONS}
 
 Formatting: plain text only. No LaTeX, no HTML tags, no Markdown. Use Unicode
-symbols instead (ρ, ψ, ⟨ ⟩, |0⟩, ², √, †).
+symbols instead (ρ, ψ, ⟨ ⟩, |0⟩, ², √, †). Write powers as |a|² (not |a|^2)
+and phases as e^(iφ) (never braces like e^{{iφ}}). Subscripts: ρ₀₀, ρ₁₁.
 
 Study material:
 \"\"\"
