@@ -49,6 +49,7 @@ Return JSON with these keys:
 - "key_points": a list of 1-3 points a correct answer MUST contain. Include
   ONLY what the question explicitly asks for - never extra facts that the
   question does not request.
+- "hint": one short nudge toward the method, WITHOUT giving the answer
 
 Formatting: plain text only. No LaTeX, no HTML tags, no Markdown. Use Unicode
 symbols instead (ρ, ψ, ⟨ ⟩, |0⟩, ², √, †).
@@ -124,3 +125,59 @@ Base it on this material where possible:
 \"\"\"
 """
     return ask(prompt)
+
+
+def micro_lesson(material: str, concept: str, difficulty: int) -> str:
+    """A short 'teach first' card shown before the questions of a level.
+
+    Assumes the learner has NOT read the material yet: explain first, then ask.
+    Inspired by micro-learning apps that teach one idea per ~3-minute step.
+    """
+    goal = {
+        1: "the core definition and what each part means",
+        2: "how to actually calculate it, step by step",
+        3: "how to use it in a new situation",
+    }[difficulty]
+    prompt = f"""Teach a beginner the concept "{concept}", focusing on {goal}.
+Assume they have NOT read the study material and know only basic linear algebra.
+
+Rules:
+- Max 120 words. One idea only. Short sentences, no filler phrases.
+- Build from something they already know (vectors, matrices) to the new idea.
+- Include ONE tiny worked example with small numbers.
+- Draw every vector or matrix as a small text grid, e.g.
+
+      ρ = | 0.5  0.5 |
+          | 0.5  0.5 |
+
+- Plain text only: no LaTeX, no HTML, no Markdown. Unicode symbols are fine.
+
+Study material (use it as the source of truth):
+\"\"\"
+{material}
+\"\"\"
+"""
+    return ask(prompt)
+
+
+def simulate_answer(question: dict, persona: str) -> str:
+    """Answer as a simulated student - lets the developer test the full loop
+    without typing answers by hand.
+
+    persona: "strong" (answers correctly), "weak" (makes a typical mistake).
+    """
+    if persona == "strong":
+        instruction = ("Answer correctly and briefly, like a good student. "
+                       "Do not copy the model answer word for word.")
+    else:
+        instruction = ("Answer like a beginner who makes ONE typical, realistic "
+                       "mistake for this topic (e.g. forgets a normalisation "
+                       "factor or mixes up a sign). Keep it short.")
+    prompt = f"""You are role-playing a student in a quantum computing course.
+{instruction}
+
+Question: {question["question"]}
+(For reference only - correct solution: {question["expected_answer"]})
+
+Write only the student's answer, in plain text."""
+    return ask(prompt, temperature=0.8)
