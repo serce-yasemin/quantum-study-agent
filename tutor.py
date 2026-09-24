@@ -5,6 +5,14 @@ learner's answer, and write a short review page when they get stuck.
 
 from llm import ask, ask_json
 
+# Physics conventions every prompt must follow, so lessons, questions, grading
+# and review pages never contradict each other (e.g. the sign of a phase).
+CONVENTIONS = """Conventions (follow exactly):
+- Write qubit states as |ψ⟩ = a|0⟩ + b·e^(iφ)|1⟩ with a, b ≥ 0.
+- Then ρ = |ψ⟩⟨ψ| has ρ₀₁ = ⟨0|ρ|1⟩ = a·b·e^(−iφ) and ρ₁₀ = a·b·e^(+iφ).
+- "Relative phase" means φ, the phase of |1⟩ relative to |0⟩: φ = arg(ρ₁₀) = −arg(ρ₀₁).
+- The coherence magnitude is |ρ₀₁| = |ρ₁₀|."""
+
 DIFFICULTY_NAMES = {1: "recall", 2: "apply", 3: "transfer"}
 
 DIFFICULTY_RULES = {
@@ -82,6 +90,8 @@ Return JSON with these keys:
   question does not request.
 - "hint": one short nudge toward the method, WITHOUT giving the answer
 
+{CONVENTIONS}
+
 Formatting: plain text only. No LaTeX, no HTML tags, no Markdown. Use Unicode
 symbols instead (ρ, ψ, ⟨ ⟩, |0⟩, ², √, †).
 
@@ -117,6 +127,8 @@ Return JSON with these keys:
 - "weak_point": if incorrect, a short phrase naming the exact gap
   (e.g. "purity test tr(rho^2)"); if correct, null
 
+{CONVENTIONS}
+
 Formatting: plain text only, no LaTeX, no HTML, no Markdown.
 """
     result = ask_json(prompt, temperature=0.0)
@@ -145,6 +157,8 @@ Write a short review page (max 200 words) that:
    step, with different numbers - do NOT solve the original question itself,
    because the student will get a new question of this type next
 3. Ends with one tip for remembering it
+
+{CONVENTIONS}
 
 Formatting: this is shown in a terminal, so use plain text only. No LaTeX,
 no HTML, no Markdown headings or bold. Use Unicode symbols (ρ, ψ, ⟨ ⟩, ², √).
@@ -180,6 +194,8 @@ Rules:
           | 0.5  0.5 |
 
 - Plain text only: no LaTeX, no HTML, no Markdown. Unicode symbols are fine.
+
+{CONVENTIONS}
 
 Study material (use it as the source of truth):
 \"\"\"
