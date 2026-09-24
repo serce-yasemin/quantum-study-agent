@@ -61,6 +61,12 @@ def access_gate() -> None:
 access_gate()
 
 ss = st.session_state
+
+# Match the figures to the viewer's light/dark theme.
+try:
+    qv.set_theme(st.context.theme.type == "dark")
+except Exception:
+    qv.set_theme(False)
 ss.setdefault("profile", {"learner": {"goal": "", "interests": []},
                           "concepts": {}, "assignments": []})
 ss.setdefault("stage", "start")

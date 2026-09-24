@@ -12,15 +12,31 @@ Convention (same as tutor.CONVENTIONS):
 import numpy as np
 import plotly.graph_objects as go
 
-# Categorical slots 1-3 of the validated default palette (light surface).
-COLOR_A = "#2a78d6"     # state A
-COLOR_B = "#eb6834"     # state B
-COLOR_MIX = "#1baf7a"   # the mixture
-INK = "#52514e"         # secondary text / axes
-GRID = "#d9d8d4"        # recessive sphere wireframe
+# Categorical slots 1-3 of the validated default palette, stepped separately
+# for light and dark surfaces. Sequential blue ramp: near-zero recedes toward
+# the surface in both modes.
+THEMES = {
+    "light": dict(COLOR_A="#2a78d6", COLOR_B="#eb6834", COLOR_MIX="#1baf7a",
+                  INK="#52514e", GRID="#d9d8d4", TEXT="#0b0b0b", RING="#ffffff",
+                  SEQ_BLUE=[[0.0, "#cde2fb"], [0.35, "#86b6ef"],
+                            [0.7, "#2a78d6"], [1.0, "#184f95"]],
+                  CELL_DARK_ABOVE=0.55),
+    "dark": dict(COLOR_A="#3987e5", COLOR_B="#d95926", COLOR_MIX="#199e70",
+                 INK="#c3c2b7", GRID="#4a4a46", TEXT="#ffffff", RING="#1a1a19",
+                 SEQ_BLUE=[[0.0, "#1c2a3d"], [0.35, "#1c5cab"],
+                           [0.7, "#3987e5"], [1.0, "#9ec5f4"]],
+                 CELL_DARK_ABOVE=None),
+}
+COLOR_A = COLOR_B = COLOR_MIX = INK = GRID = TEXT = RING = None
+SEQ_BLUE = CELL_DARK_ABOVE = None
 
-# Sequential blue ramp (step 100 -> 600) for |ρᵢⱼ| magnitudes.
-SEQ_BLUE = [[0.0, "#cde2fb"], [0.35, "#86b6ef"], [0.7, "#2a78d6"], [1.0, "#184f95"]]
+
+def set_theme(dark: bool) -> None:
+    """Switch every figure color to the light or dark palette."""
+    globals().update(THEMES["dark" if dark else "light"])
+
+
+set_theme(False)
 
 PAULI = {
     "x": np.array([[0, 1], [1, 0]], dtype=complex),
@@ -128,9 +144,9 @@ def bloch_figure(points: list[dict], chord: bool = False) -> go.Figure:
         fig.add_trace(go.Scatter3d(
             x=[x], y=[y], z=[z], mode="markers+text",
             marker=dict(size=7, color=pt["color"],
-                        line=dict(color="#ffffff", width=2)),
+                        line=dict(color=RING, width=2)),
             text=[pt["label"]], textposition="top center",
-            textfont=dict(color="#0b0b0b", size=13),
+            textfont=dict(color=TEXT, size=13),
             name=pt["label"],
             hovertemplate=(f"<b>{pt['label']}</b><br>"
                            "x = %{x:.3f}<br>y = %{y:.3f}<br>z = %{z:.3f}<br>"
@@ -147,6 +163,13 @@ def bloch_figure(points: list[dict], chord: bool = False) -> go.Figure:
         ),
     )
     return fig
+
+
+def _cell_ink(value: float) -> str:
+    """White ink on dark cells, near-black on light cells (both modes)."""
+    if CELL_DARK_ABOVE is None:          # dark mode: ramp gets LIGHTER with value
+        return "#0b0b0b" if value > 0.75 else "#ffffff"
+    return "#ffffff" if value > CELL_DARK_ABOVE else "#0b0b0b"
 
 
 def matrix_figure(rho: np.ndarray, title: str, show_scale: bool = True) -> go.Figure:
@@ -169,7 +192,7 @@ def matrix_figure(rho: np.ndarray, title: str, show_scale: bool = True) -> go.Fi
         for j in range(2):
             fig.add_annotation(x=j, y=i, text=text[i][j], showarrow=False,
                                font=dict(size=15,
-                                         color="#ffffff" if mag[i, j] > 0.55 else "#0b0b0b"))
+                                         color=_cell_ink(mag[i, j])))
     fig.update_layout(
         title=dict(text=title, font=dict(size=14)),
         height=300, margin=dict(l=10, r=10, t=40, b=10),
