@@ -44,7 +44,9 @@ def ask(prompt: str, temperature: float = 0.4) -> str:
     )
     text = response.choices[0].message.content or ""
     # Some reasoning models wrap their thinking in <think> tags; drop it.
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    # The terminal shows raw text, so stray Markdown bold markers are noise.
+    return text.replace("**", "").strip()
 
 
 def ask_json(prompt: str, temperature: float = 0.4) -> dict:

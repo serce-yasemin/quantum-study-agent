@@ -8,7 +8,9 @@ Usage:
 
 How a session works:
 - Teach first: each level opens with a short lesson card, so a learner who
-  has not read the material yet is not thrown straight into questions.
+  has not read the material yet is not thrown straight into questions. The
+  lesson and all questions of that level share ONE learning objective, so
+  nothing is asked that was not taught.
 - Difficulty ladder: recall -> apply -> transfer. A level is passed after
   2 correct answers in a row; a wrong answer shows a review page.
 - Short sessions: at most 5 questions, then come back another day.
@@ -71,9 +73,14 @@ def get_answer(question: dict, simulate: str | None) -> str:
     return answer
 
 
-def show_lesson(material: str, concept_name: str, level: int) -> None:
+def show_lesson(material: str, concept_name: str, level: int) -> str:
+    """Pick this level's single learning objective, teach it, return it so
+    every question at this level tests the same thing the lesson taught."""
+    objective = tutor.learning_objective(material, concept_name, level)
     print(f"\n=== Lesson: {concept_name} - {tutor.DIFFICULTY_NAMES[level]} ===")
-    print(tutor.micro_lesson(material, concept_name, level))
+    print(f"Goal: {objective}\n")
+    print(tutor.micro_lesson(material, concept_name, level, objective))
+    return objective
 
 
 def run_session(concept_name: str, material: str, max_questions: int,
@@ -94,6 +101,7 @@ def run_session(concept_name: str, material: str, max_questions: int,
     tries = 0
     asked: list[str] = []
     lesson_shown_for = None
+    objective = None
 
     while level <= profile_store.MAX_LEVEL:
         if len(asked) >= max_questions:
@@ -102,14 +110,14 @@ def run_session(concept_name: str, material: str, max_questions: int,
             break
 
         if lesson_shown_for != level:
-            show_lesson(material, concept_name, level)
+            objective = show_lesson(material, concept_name, level)
             lesson_shown_for = level
 
         weak_points = [h["weak_point"] for h in concept["history"] if h["weak_point"]]
         print(f"\n--- Question {len(asked) + 1}/{max_questions} | Level {level}/3 "
               f"({tutor.DIFFICULTY_NAMES[level]}) | streak {concept['streak']}/{need} ---")
         question = tutor.generate_question(material, concept_name, level,
-                                           weak_points, asked)
+                                           weak_points, asked, objective)
         asked.append(question["question"])
         print(f"\nQ: {question['question']}")
 

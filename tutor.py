@@ -20,13 +20,44 @@ DIFFICULTY_RULES = {
 }
 
 
+def learning_objective(material: str, concept: str, difficulty: int) -> str:
+    """One sentence: the single skill this level teaches AND tests.
+
+    The lesson card and every question at this level are built from the same
+    objective, so the learner is never asked about something the lesson did
+    not teach (constructive alignment).
+    """
+    prompt = f"""You are planning one short study step on "{concept}" for a beginner.
+Difficulty level {difficulty}/3 - {DIFFICULTY_RULES[difficulty]}
+
+Write ONE learning objective: a single sentence starting with "The learner can ...".
+- It must be teachable in about 120 words with one tiny example.
+- It may only use ideas that appear in the study material (plus basic linear
+  algebra). Do NOT introduce observables, measurements in other bases, gates,
+  partial traces or anything else the material does not cover.
+
+Reply with the sentence only.
+
+Study material:
+\"\"\"
+{material}
+\"\"\"
+"""
+    return ask(prompt, temperature=0.2).strip().splitlines()[0]
+
+
 def generate_question(material: str, concept: str, difficulty: int,
                       weak_points: list[str],
-                      previous_questions: list[str] | None = None) -> dict:
-    """Return {"question", "expected_answer", "key_points"}."""
+                      previous_questions: list[str] | None = None,
+                      objective: str | None = None) -> dict:
+    """Return {"question", "expected_answer", "key_points", "hint"}."""
     focus = ""
+    if objective:
+        focus = (f"The question MUST test exactly this learning objective, "
+                 f"which the learner was just taught: {objective}\n"
+                 "Do not require any idea beyond it.\n")
     if weak_points:
-        focus = ("The learner previously struggled with: "
+        focus += ("The learner previously struggled with: "
                  + "; ".join(weak_points[-3:])
                  + ". If relevant, target that gap.")
     if previous_questions:
@@ -127,18 +158,16 @@ Base it on this material where possible:
     return ask(prompt)
 
 
-def micro_lesson(material: str, concept: str, difficulty: int) -> str:
+def micro_lesson(material: str, concept: str, difficulty: int,
+                 objective: str) -> str:
     """A short 'teach first' card shown before the questions of a level.
 
     Assumes the learner has NOT read the material yet: explain first, then ask.
     Inspired by micro-learning apps that teach one idea per ~3-minute step.
+    Teaches exactly the objective the questions will test.
     """
-    goal = {
-        1: "the core definition and what each part means",
-        2: "how to actually calculate it, step by step",
-        3: "how to use it in a new situation",
-    }[difficulty]
-    prompt = f"""Teach a beginner the concept "{concept}", focusing on {goal}.
+    prompt = f"""Teach a beginner the concept "{concept}".
+Teach exactly this objective and nothing beyond it: {objective}
 Assume they have NOT read the study material and know only basic linear algebra.
 
 Rules:
