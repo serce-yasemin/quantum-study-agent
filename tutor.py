@@ -12,7 +12,11 @@ DIFFICULTY_RULES = {
     2: ("APPLY: ask the learner to work out a small concrete example or "
         "calculation (use numbers, vectors or matrices if the topic allows)."),
     3: ("TRANSFER: ask the learner to apply the idea to a situation that is "
-        "NOT described in the material."),
+        "NOT described in the material. The situation must be new, but the "
+        "tools must not: solving it may only need ideas from the material plus "
+        "basic linear algebra. Never require a technique the material does not "
+        "teach (e.g. partial trace, a specific gate, entanglement measures) - "
+        "that tests a different concept, not transfer of this one."),
 }
 
 
