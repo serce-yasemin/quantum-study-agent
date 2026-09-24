@@ -12,6 +12,11 @@ re-reading the text.
 
 ## What this agent does differently
 
+- **See it, don't just read it** — the web app's Explore tab puts any one-qubit
+  state on a Bloch sphere next to its density-matrix heat map. Mix two states
+  with a slider and watch the mixture move along the straight line between
+  them, inside the sphere, while the coherence and purity drop live. These
+  numbers are computed exactly (numpy), not by the AI.
 - **Teach first, then ask** — each level opens with a short lesson card
   (max ~120 words, one idea, one tiny worked example, matrices drawn as text
   grids). It assumes you have *not* read the material yet.
@@ -38,8 +43,10 @@ re-reading the text.
 - [x] Week 1 — Nebius Token Factory + Nemotron connection
 - [x] Week 2 — interactive difficulty ladder, answer grading, learner profile,
       teach-first lessons, short sessions, hints, simulated-student test mode
-- [ ] Week 3 — web UI with visuals (matrix heat map, Bloch sphere, sliders
-      that update the state live); learning path that starts from the basics
+- [x] Week 3 (part 1) — Streamlit web app: Explore tab (Bloch sphere, heat
+      map, live mixing slider), Study tab (full tutor loop), downloadable
+      learner profile, access code to protect API credits
+- [ ] Week 3 (part 2) — learning path that starts from the basics
 - [ ] Week 4 — assignments (book sections + web resources verified with search),
       follow-up check questions, session start review
 - [ ] Week 5 — a week of real daily use; demo built from real progress data
@@ -47,6 +54,7 @@ re-reading the text.
 ## Tech stack
 
 - Python
+- Streamlit, Plotly, NumPy
 - NVIDIA Nemotron (`nvidia/nemotron-3-super-120b-a12b`) via Nebius Token Factory
   (OpenAI-compatible API)
 
@@ -62,7 +70,24 @@ Create a `.env` file (never commit this):
 NEBIUS_API_KEY=your_key_here
 ```
 
-## Run
+## Run the web app
+
+```
+pip3 install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+On Streamlit Community Cloud, add two secrets (Settings → Secrets):
+
+```
+NEBIUS_API_KEY = "your_key_here"
+ACCESS_CODE = "a code you give to the judges"
+```
+
+The access code keeps strangers from spending the API credits on the public
+demo. Locally, without secrets, the app opens directly.
+
+## Run in the terminal
 
 Paste at least 200 characters of study material into `test.txt`, then:
 
@@ -89,6 +114,9 @@ checked without typing. It uses the real API and saves to a separate
 
 | File | Role |
 |---|---|
+| `streamlit_app.py` | Web app: Explore / Study / My progress tabs |
+| `quantum_viz.py` | Exact qubit math + Bloch sphere and heat-map figures |
+| `materials/density_matrix.txt` | Built-in study primer |
 | `app.py` | Study session loop (command line) |
 | `tutor.py` | Question generation, grading, review pages |
 | `profile_store.py` | Learner profile: load, save, difficulty ladder, review dates |

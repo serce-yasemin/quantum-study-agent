@@ -8,3 +8,6 @@ venv/
 learner_profile.json
 test.txt
 learner_profile.simulated.json
+
+# Streamlit secrets (API key, access code) never go to GitHub
+.streamlit/secrets.toml
