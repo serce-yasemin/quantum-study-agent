@@ -36,7 +36,12 @@ The question must be answerable in a few sentences or a short calculation.
 Return JSON with these keys:
 - "question": the question text
 - "expected_answer": a correct model answer, including a brief worked solution
-- "key_points": a list of 1-3 points a correct answer MUST contain
+- "key_points": a list of 1-3 points a correct answer MUST contain. Include
+  ONLY what the question explicitly asks for - never extra facts that the
+  question does not request.
+
+Formatting: plain text only. No LaTeX, no HTML tags, no Markdown. Use Unicode
+symbols instead (ρ, ψ, ⟨ ⟩, |0⟩, ², √, †).
 
 Study material:
 \"\"\"
@@ -48,9 +53,15 @@ Study material:
 
 def grade_answer(question: dict, answer: str) -> dict:
     """Return {"correct": bool, "feedback": str, "weak_point": str | None}."""
-    prompt = f"""You are grading a student's answer. Be fair but strict:
-the answer is correct only if it covers every key point, even if the
-wording is different. Minor notation slips are fine; conceptual errors are not.
+    prompt = f"""You are grading a student's answer. Judge it ONLY against
+what the question actually asks.
+- Mark it correct if it answers the question correctly, even with different
+  wording or less detail than the model answer.
+- Do NOT penalize the student for leaving out facts the question did not ask
+  for. You may mention such extras in the feedback as a tip, but they must not
+  change the verdict.
+- Mark it incorrect only for a conceptual error, a wrong result, or a missing
+  part that the question explicitly requested.
 
 Question: {question["question"]}
 Model answer: {question["expected_answer"]}
@@ -63,6 +74,8 @@ Return JSON with these keys:
 - "feedback": 2-3 sentences to the student - what was right, what was missing
 - "weak_point": if incorrect, a short phrase naming the exact gap
   (e.g. "purity test tr(rho^2)"); if correct, null
+
+Formatting: plain text only, no LaTeX, no HTML, no Markdown.
 """
     result = ask_json(prompt, temperature=0.0)
     result["correct"] = bool(result.get("correct"))
@@ -77,6 +90,10 @@ Write a short review page (max 200 words) that:
 1. Explains that specific point in plain language
 2. Gives one small worked example
 3. Ends with one tip for remembering it
+
+Formatting: this is shown in a terminal, so use plain text only. No LaTeX,
+no HTML, no Markdown headings or bold. Use Unicode symbols (ρ, ψ, ⟨ ⟩, ², √).
+Write matrices on separate lines, e.g.  ρ = [[a, b], [c, d]].
 
 Base it on this material where possible:
 \"\"\"
