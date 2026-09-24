@@ -82,13 +82,26 @@ Formatting: plain text only, no LaTeX, no HTML, no Markdown.
     return result
 
 
-def review_page(material: str, concept: str, weak_point: str) -> str:
-    """A short focused explanation to read before trying again."""
-    prompt = f"""A student studying "{concept}" got stuck on: {weak_point}.
+def review_page(material: str, concept: str, weak_point: str,
+                question: dict, answer: str) -> str:
+    """A short focused explanation to read before trying again.
+
+    It sees the exact question the student missed and their answer, so the
+    review targets that gap instead of a generic summary of the concept.
+    """
+    prompt = f"""A student studying "{concept}" just got this question wrong.
+
+Question: {question["question"]}
+Correct solution: {question["expected_answer"]}
+Student's answer: \"\"\"{answer}\"\"\"
+Identified gap: {weak_point}
 
 Write a short review page (max 200 words) that:
-1. Explains that specific point in plain language
-2. Gives one small worked example
+1. Names the specific idea or technique the student was missing for THIS
+   question (if they wrote "I don't know", teach the method from scratch)
+2. Works through ONE similar example of the SAME type as the question, step by
+   step, with different numbers - do NOT solve the original question itself,
+   because the student will get a new question of this type next
 3. Ends with one tip for remembering it
 
 Formatting: this is shown in a terminal, so use plain text only. No LaTeX,

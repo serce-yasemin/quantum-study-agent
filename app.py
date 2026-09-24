@@ -90,7 +90,8 @@ def run_session(concept_name: str, material: str) -> None:
         tries += 1
         print(f"\nModel answer: {question['expected_answer']}")
         print("\n=== Review page ===")
-        print(tutor.review_page(material, concept_name, result.get("weak_point") or ""))
+        print(tutor.review_page(material, concept_name,
+                                result.get("weak_point") or "", question, answer))
 
         if tries >= MAX_TRIES_PER_LEVEL:
             print(f"\nLet's stop here for today. '{concept_name}' is scheduled "
