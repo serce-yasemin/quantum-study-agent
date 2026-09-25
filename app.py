@@ -88,7 +88,8 @@ def show_lesson(material: str, concept_name: str, level: int) -> str:
 
 
 def run_session(concept_name: str, material: str, max_questions: int,
-                simulate: str | None) -> None:
+                simulate: str | None) -> str | None:
+    """One short session. Returns the gap found (weak point), if any."""
     profile = profile_store.load()
     concept = profile_store.get_concept(profile, concept_name)
     if concept_name in curriculum.BY_ID:
@@ -170,10 +171,15 @@ def run_session(concept_name: str, material: str, max_questions: int,
             for opened in curriculum.newly_unlocked(profile, concept_name):
                 print(f"*** Unlocked: {curriculum.BY_ID[opened]['title']} ***")
 
-    if asked:
-        print_homework(homework.create(profile, concept_name, title_of(concept_name),
-                                       material, session_weak))
     profile_store.save(profile)
+    return session_weak
+
+
+def keep_going(simulate: str | None) -> bool:
+    if simulate:
+        return False
+    reply = input("\nKeep going with another short round? [y/N] ").strip().lower()
+    return reply in ("y", "yes")
 
 
 def title_of(concept_name: str) -> str:
@@ -225,7 +231,23 @@ def main() -> None:
         raise SystemExit(f"'{concept}' is not a step of the learning path - "
                          "pass --material with your own study text.")
 
-    run_session(concept, material, args.max_questions, args.simulate)
+    # Short rounds; the learner may keep going. Homework comes once, at the end.
+    gaps = []
+    while True:
+        gap = run_session(concept, material, args.max_questions, args.simulate)
+        gaps.append(gap)
+        if not keep_going(args.simulate):
+            break
+        if (concept in curriculum.BY_ID and not args.material
+                and curriculum.is_mastered(profile_store.load(), concept)):
+            # A mastered step moves the learner on to the next one.
+            concept, _ = curriculum.recommend(profile_store.load())
+            material = curriculum.material(concept)
+
+    profile = profile_store.load()
+    weak = next((g for g in reversed(gaps) if g), None)
+    print_homework(homework.create(profile, concept, title_of(concept), material, weak))
+    profile_store.save(profile)
 
 
 if __name__ == "__main__":

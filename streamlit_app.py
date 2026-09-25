@@ -208,6 +208,21 @@ def call(fn, *args):
         st.stop()
 
 
+def begin_session(concept: str, material: str, keep_gaps: bool = False) -> None:
+    """Start a session of up to MAX_QUESTIONS on one concept."""
+    ss.concept, ss.material = concept, material
+    ss.homework = None
+    if not keep_gaps:
+        ss.session_weak = None
+    c = concept_record()
+    if concept in curriculum.BY_ID:
+        c["prerequisites"] = curriculum.BY_ID[concept]["prerequisites"]
+    ss.was_mastered = c["level"] >= profile_store.MAX_LEVEL
+    ss.level = profile_store.MAX_LEVEL if c["status"] == "mastered" else c["level"] + 1
+    ss.asked = []
+    start_level()
+
+
 def start_level() -> None:
     material = ss.material
     ss.objective = call(tutor.learning_objective, material, ss.concept, ss.level)
@@ -262,15 +277,7 @@ with tab_study:
                 st.warning("Please paste at least 200 characters of material "
                            "(no API call was made).")
                 st.stop()
-            ss.concept, ss.material = concept, material
-            ss.session_weak, ss.homework = None, None
-            c = concept_record()
-            if concept in curriculum.BY_ID:
-                c["prerequisites"] = curriculum.BY_ID[concept]["prerequisites"]
-            ss.was_mastered = c["level"] >= profile_store.MAX_LEVEL
-            ss.level = profile_store.MAX_LEVEL if c["status"] == "mastered" else c["level"] + 1
-            ss.asked = []
-            start_level()
+            begin_session(concept, material)
             st.rerun()
 
     else:
@@ -370,22 +377,43 @@ with tab_study:
             st.subheader("Session finished")
             st.info(ss.end_reason)
             if ss.get("homework") is None:
-                try:
-                    with st.spinner("Preparing your homework (checking every link)…"):
-                        ss.homework = homework.create(ss.profile, ss.concept,
-                                                      concept_title(ss.concept),
-                                                      ss.material, ss.session_weak)
-                except Exception as exc:
-                    ss.homework = {}
-                    st.warning(f"Could not prepare homework this time: {exc}")
+                # The learner chooses: another short round now, or stop and get
+                # homework. Homework is made only once they stop, so continuing
+                # does not pile up assignments (or API calls).
+                just_mastered = (not ss.was_mastered and
+                                 concept_record()["level"] >= profile_store.MAX_LEVEL)
+                if just_mastered and ss.concept in curriculum.BY_ID:
+                    nxt, _ = curriculum.recommend(ss.profile)
+                else:
+                    nxt = ss.concept
+                st.caption("Short sessions help memory stick, but it is your call.")
+                col1, col2 = st.columns(2)
+                if col1.button(f"Keep going: {MAX_QUESTIONS} more questions on "
+                               f"{concept_title(nxt)}", width="stretch"):
+                    material = (curriculum.material(nxt) if nxt in curriculum.BY_ID
+                                else ss.material)
+                    begin_session(nxt, material, keep_gaps=True)
+                    st.rerun()
+                if col2.button("Done for today - give me homework", type="primary",
+                               width="stretch"):
+                    try:
+                        with st.spinner("Preparing your homework (checking every link)…"):
+                            ss.homework = homework.create(ss.profile, ss.concept,
+                                                          concept_title(ss.concept),
+                                                          ss.material, ss.session_weak)
+                        st.rerun()
+                    except Exception as exc:
+                        ss.homework = {}
+                        st.warning(f"Could not prepare homework this time: {exc}")
             if ss.homework:
                 st.subheader("📚 Your homework")
                 show_assignment(ss.homework)
-            st.write("Your progress is in the 🗂️ **My progress** tab - download it "
-                     "to keep it.")
-            if st.button("Start a new session"):
-                ss.stage = "start"
-                st.rerun()
+            if ss.get("homework") is not None:
+                st.write("Your progress is in the 🗂️ **My progress** tab - download "
+                         "it to keep it.")
+                if st.button("Start a new session"):
+                    ss.stage = "start"
+                    st.rerun()
 
 
 # ================================================================ PROFILE

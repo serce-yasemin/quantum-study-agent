@@ -26,8 +26,10 @@ re-reading the text.
 - **Teach first, then ask** — each level opens with a short lesson card
   (max ~120 words, one idea, one tiny worked example, matrices drawn as text
   grids). It assumes you have *not* read the material yet.
-- **Short sessions** — at most 5 questions per session, then come back
-  another day. Short daily practice beats long cramming.
+- **Short rounds, your choice** — a round is at most 5 questions. After each
+  round you choose: *keep going* (another round; if you just mastered a step,
+  the next step on your path) or *done for today*, which gives you homework
+  once for the whole sitting.
 - **Hints** — type `hint` for a nudge toward the method without the answer.
 - **Difficulty ladder** — questions climb from *recall* → *apply* (a small
   calculation) → *transfer* (a situation not in the material). You move up
