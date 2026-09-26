@@ -42,3 +42,28 @@ def create(profile: dict, concept: str, title: str, material: str,
 
 def open_assignments(profile: dict) -> list[dict]:
     return [a for a in profile.get("assignments", []) if a["status"] == "open"]
+
+
+def check(assignment: dict, answers: list[str]) -> list[dict]:
+    """Grade the learner's answers to the assignment's check questions.
+
+    Both correct -> the homework counts as done. Otherwise it stays open so
+    the learner can look again and retry later. Every attempt is logged.
+    """
+    results = []
+    for q, answer in zip(assignment["check_questions"], answers):
+        graded = tutor.grade_answer({"question": q["question"],
+                                     "expected_answer": q["expected_answer"],
+                                     "key_points": []}, answer)
+        results.append({"question": q["question"], "answer": answer, **graded})
+
+    passed = bool(results) and all(r["correct"] for r in results)
+    assignment.setdefault("checks", []).append({
+        "date": date.today().isoformat(),
+        "correct": [r["correct"] for r in results],
+        "gaps": [r.get("weak_point") for r in results if not r["correct"]],
+    })
+    if passed:
+        assignment["status"] = "done"
+        assignment["done_on"] = date.today().isoformat()
+    return results

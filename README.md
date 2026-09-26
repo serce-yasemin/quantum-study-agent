@@ -46,8 +46,13 @@ re-reading the text.
   the **Tavily Search API**, restricted to trusted educational sites
   (Wikipedia, IBM Quantum Learning, PennyLane, arXiv, university courses, …).
   Our own code then opens every link and keeps only the ones that load. The
-  model only *picks* from these lists by number. Each assignment stores two
-  check questions for later.
+  model only *picks* from these lists by number.
+- **Did you really do the homework?** — each assignment stores two check
+  questions. When you say "I did it", the agent asks them and grades your
+  answers. Both right: homework done. Otherwise it stays open, and the gap it
+  found is fed into your next practice questions.
+- **Welcome back** — every session starts with what is waiting for you:
+  homework to check and spaced-repetition reviews that are due.
 - **Memory that stays with you** — every attempt, weak point and review date
   is saved to a local `learner_profile.json`. The model itself is stateless;
   the agent's memory lives in this file, on your machine, and is never pushed
@@ -67,7 +72,8 @@ re-reading the text.
       (4 steps, unlock-on-mastery, "what to study now" recommendation)
 - [x] Week 4 (part 1) — homework: checked book sections + Tavily web search on
       trusted sites + code-verified links
-- [ ] Week 4 (part 2) — follow-up check questions, session start review
+- [x] Week 4 (part 2) — homework check questions, session start review
+- [ ] Next — keep the learner profile across visits without manual download
 - [ ] Week 5 — a week of real daily use; demo built from real progress data
 
 ## Tech stack

@@ -175,6 +175,27 @@ def run_session(concept_name: str, material: str, max_questions: int,
     return session_weak
 
 
+def check_open_homework() -> None:
+    """Session start: ask about homework that is still open."""
+    profile = profile_store.load()
+    for a in homework.open_assignments(profile):
+        if not a["check_questions"]:
+            continue
+        reply = input(f"\nHomework #{a['id']} ({title_of(a['concept'])}, given "
+                      f"{a['created']}): did you do it? [y/N] ").strip().lower()
+        if reply not in ("y", "yes"):
+            continue
+        answers = []
+        for q in a["check_questions"]:
+            print(f"\nCheck: {q['question']}")
+            answers.append(read_answer({"hint": None}))
+        for r in homework.check(a, answers):
+            print(f"  {'CORRECT' if r['correct'] else 'NOT YET'} - {r['feedback']}")
+        print("Homework done!" if a["status"] == "done" else
+              "Not passed yet - have another look; you can retry next time.")
+        profile_store.save(profile)
+
+
 def keep_going(simulate: str | None) -> bool:
     if simulate:
         return False
@@ -230,6 +251,9 @@ def main() -> None:
     else:
         raise SystemExit(f"'{concept}' is not a step of the learning path - "
                          "pass --material with your own study text.")
+
+    if not args.simulate:
+        check_open_homework()
 
     # Short rounds; the learner may keep going. Homework comes once, at the end.
     gaps = []

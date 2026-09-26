@@ -18,6 +18,7 @@ JSON - your learning data stays under your control.
 
 import json
 import os
+from datetime import date
 
 import numpy as np
 import streamlit as st
@@ -238,6 +239,8 @@ def next_question() -> None:
         return
     c = concept_record()
     weak = [h["weak_point"] for h in c["history"] if h["weak_point"]]
+    weak += [g for a in ss.profile.get("assignments", []) if a["concept"] == ss.concept
+             for chk in a.get("checks", []) for g in chk["gaps"] if g]
     ss.question = call(tutor.generate_question, ss.material, ss.concept, ss.level,
                        weak, ss.asked, ss.objective)
     ss.asked.append(ss.question["question"])
@@ -245,8 +248,75 @@ def next_question() -> None:
     ss.stage = "question"
 
 
+def welcome_back() -> None:
+    """Session start: what is waiting for the learner before new material -
+    homework to check and spaced-repetition reviews that are due."""
+    due = [s["id"] for s in curriculum.PATH
+           if curriculum.status(ss.profile, s["id"]) == "review_due"]
+    todo = homework.open_assignments(ss.profile)
+    if not due and not todo:
+        return
+    st.subheader("👋 Welcome back")
+    for concept in due:
+        st.info(f"🔁 **Review due:** {concept_title(concept)} - it is recommended "
+                "below, so a quick round keeps it fresh.")
+    for a in todo:
+        with st.container(border=True):
+            st.markdown(f"📚 **Homework #{a['id']}** · {concept_title(a['concept'])} "
+                        f"· given {a['created']}")
+            st.caption(a["task"])
+            if a.get("checks"):
+                st.caption(f"Checked {len(a['checks'])}x so far - not passed yet.")
+            if a["check_questions"]:
+                if st.button("I did it - check me", key=f"check_{a['id']}"):
+                    ss.checking, ss.check_results = a["id"], None
+                    ss.stage = "check"
+                    st.rerun()
+            elif st.button("Mark as done", key=f"done_{a['id']}"):
+                a["status"], a["done_on"] = "done", str(date.today())
+                st.rerun()
+    st.divider()
+
+
+def check_homework() -> None:
+    """Two short questions that someone who did the homework can answer."""
+    a = next(x for x in ss.profile["assignments"] if x["id"] == ss.checking)
+    st.subheader(f"Homework check · #{a['id']} {concept_title(a['concept'])}")
+    if ss.get("check_results") is None:
+        st.write("Answer in a line or two - no need to be formal.")
+        answers = [st.text_area(q["question"], key=f"hw_{a['id']}_{i}", height=100)
+                   for i, q in enumerate(a["check_questions"])]
+        if st.button("Check my answers", type="primary",
+                     disabled=not all(x.strip() for x in answers)):
+            ss.check_results = call(homework.check, a, answers)
+            st.rerun()
+        if st.button("Back"):
+            ss.stage = "start"
+            st.rerun()
+        return
+
+    for r, q in zip(ss.check_results, a["check_questions"]):
+        st.markdown(f"**{r['question']}**  \nYour answer: {r['answer']}")
+        if r["correct"]:
+            st.success(f"✅ {r['feedback']}")
+        else:
+            st.error(f"Not yet - {r['feedback']}")
+            with st.expander("Expected answer"):
+                st.write(q["expected_answer"])
+    if a["status"] == "done":
+        st.balloons()
+        st.success("Homework done! 🎉")
+    else:
+        st.warning("Not passed yet - have another look at the resources; the gap "
+                   "will also come up in your next questions. You can retry later.")
+    if st.button("Back to start", type="primary"):
+        ss.stage, ss.check_results = "start", None
+        st.rerun()
+
+
 with tab_study:
     if ss.stage == "start":
+        welcome_back()
         st.subheader("Start a short session")
         st.write("One idea at a time: a short lesson, then questions that climb "
                  "**recall → apply → transfer**. Pass a level with "
@@ -279,6 +349,9 @@ with tab_study:
                 st.stop()
             begin_session(concept, material)
             st.rerun()
+
+    elif ss.stage == "check":
+        check_homework()
 
     else:
         c = concept_record()
