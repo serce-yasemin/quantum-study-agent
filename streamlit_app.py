@@ -27,7 +27,7 @@ st.set_page_config(page_title="Quantum Study Agent", page_icon="⚛️", layout=
 
 # Secrets from Streamlit Cloud -> environment, before the LLM client is created.
 try:
-    for key in ("NEBIUS_API_KEY", "TAVILY_API_KEY"):
+    for key in ("NEBIUS_API_KEY", "TAVILY_API_KEY", "SUPABASE_URL", "SUPABASE_KEY"):
         if key in st.secrets and not os.environ.get(key):
             os.environ[key] = st.secrets[key]
     ACCESS_CODE = st.secrets.get("ACCESS_CODE")
@@ -37,6 +37,7 @@ except Exception:            # no secrets file when running locally
 import curriculum  # noqa: E402  (after env setup)
 import homework  # noqa: E402
 import profile_store  # noqa: E402
+import store  # noqa: E402
 import quantum_viz as qv  # noqa: E402
 import tutor  # noqa: E402
 
@@ -64,21 +65,82 @@ def access_gate() -> None:
 access_gate()
 
 ss = st.session_state
+EMPTY_PROFILE = {"learner": {"goal": "", "interests": []}, "concepts": {}, "assignments": []}
+
+
+# ---------------------------------------------------------------- accounts
+def account_gate() -> None:
+    """Sign in so the learner profile follows the learner to any device."""
+    if not store.configured() or ss.get("user_id"):
+        return
+    st.title("⚛️ Quantum Study Agent")
+    st.write("Sign in to keep your progress - it is saved to your account, so you "
+             "can continue on any device.")
+    sign_in_tab, sign_up_tab = st.tabs(["Sign in", "Create account"])
+    for tab, new in ((sign_in_tab, False), (sign_up_tab, True)):
+        with tab, st.form(f"auth_{new}"):
+            email = st.text_input("E-mail")
+            password = st.text_input("Password", type="password",
+                                     help="At least 6 characters." if new else None)
+            if st.form_submit_button("Create account" if new else "Sign in",
+                                     type="primary"):
+                try:
+                    client = store.new_client()
+                    user = (store.sign_up if new else store.sign_in)(
+                        client, email.strip(), password)
+                    profile = store.load_profile(client, user.id)
+                    if profile is None:
+                        profile = json.loads(json.dumps(EMPTY_PROFILE))
+                        store.save_profile(client, user.id, profile)
+                except Exception as exc:
+                    st.error(str(exc))
+                    st.stop()
+                ss.db, ss.user_id, ss.user_email = client, user.id, user.email
+                ss.profile, ss.saved = profile, store.fingerprint(profile)
+                ss.stage = "start"
+                st.rerun()
+    st.stop()
+
+
+def autosave() -> None:
+    """Write the profile to the learner's account whenever it has changed."""
+    if not ss.get("user_id"):
+        return
+    now = store.fingerprint(ss.profile)
+    if now != ss.get("saved"):
+        try:
+            store.save_profile(ss.db, ss.user_id, ss.profile)
+            ss.saved = now
+        except Exception as exc:
+            st.warning(f"Could not save your progress just now ({exc}). "
+                       "It will be retried on your next click.")
+
+
+account_gate()
 
 # Match the figures to the viewer's light/dark theme.
 try:
     qv.set_theme(st.context.theme.type == "dark")
 except Exception:
     qv.set_theme(False)
-ss.setdefault("profile", {"learner": {"goal": "", "interests": []},
-                          "concepts": {}, "assignments": []})
+ss.setdefault("profile", json.loads(json.dumps(EMPTY_PROFILE)))
 ss.setdefault("stage", "start")
+autosave()   # catches changes from a run that ended early with st.rerun()
 
 
 # ---------------------------------------------------------------- header
 st.title("⚛️ Quantum Study Agent")
 st.caption("A personal, stateful study agent for quantum computing · "
            "NVIDIA Nemotron on Nebius Token Factory")
+if ss.get("user_id"):
+    left, right = st.columns([4, 1])
+    left.caption(f"Signed in as {ss.user_email} · progress is saved automatically")
+    if right.button("Sign out"):
+        autosave()
+        for key in list(ss.keys()):
+            if key != "unlocked":
+                del ss[key]
+        st.rerun()
 
 tab_explore, tab_study, tab_profile = st.tabs(["🔭 Explore", "📘 Study", "🗂️ My progress"])
 
@@ -492,10 +554,13 @@ with tab_study:
 # ================================================================ PROFILE
 with tab_profile:
     st.subheader("Your learner profile")
-    st.write("This is everything the agent remembers about you. The model itself "
-             "forgets everything between calls - this file **is** its memory. "
+    where = ("It is saved to your account after every step, so you can continue "
+             "on any device." if ss.get("user_id") else
              "It lives only in this browser session; download it to keep it, "
              "upload it next time to continue.")
+    st.write("This is everything the agent remembers about you. The model itself "
+             "forgets everything between calls - this profile **is** its memory. "
+             + where)
     concepts = ss.profile["concepts"]
     order = [s["id"] for s in curriculum.PATH]
     if concepts:
@@ -531,3 +596,6 @@ with tab_profile:
     if uploaded is not None and st.button("Load this profile"):
         ss.profile = json.load(uploaded)
         st.success("Profile loaded.")
+
+
+autosave()

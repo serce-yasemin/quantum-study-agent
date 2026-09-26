@@ -53,10 +53,13 @@ re-reading the text.
   found is fed into your next practice questions.
 - **Welcome back** — every session starts with what is waiting for you:
   homework to check and spaced-repetition reviews that are due.
-- **Memory that stays with you** — every attempt, weak point and review date
-  is saved to a local `learner_profile.json`. The model itself is stateless;
-  the agent's memory lives in this file, on your machine, and is never pushed
-  to GitHub.
+- **Memory that stays with you** — sign in with e-mail + password and your
+  learner profile (every attempt, weak point, review date and homework) is
+  saved to your account after every step, so you can continue on any device.
+  The model itself is stateless; the agent's memory is this profile. It is
+  stored in Supabase with row-level security: each learner can read and write
+  only their own row. Without an account set up (e.g. locally), the profile
+  stays in the browser session and can be downloaded as JSON.
 - **Spaced repetition** — mastered concepts come back for review after a few
   days, missed ones sooner.
 
@@ -73,13 +76,14 @@ re-reading the text.
 - [x] Week 4 (part 1) — homework: checked book sections + Tavily web search on
       trusted sites + code-verified links
 - [x] Week 4 (part 2) — homework check questions, session start review
-- [ ] Next — keep the learner profile across visits without manual download
+- [x] Learner accounts: profile saved to Supabase, works on any device
 - [ ] Week 5 — a week of real daily use; demo built from real progress data
 
 ## Tech stack
 
 - Python
 - Streamlit, Plotly, NumPy
+- Supabase (accounts + profile storage, row-level security)
 - Tavily Search API (web resources for homework)
 - NVIDIA Nemotron (`nvidia/nemotron-3-super-120b-a12b`) via Nebius Token Factory
   (OpenAI-compatible API)
@@ -109,8 +113,15 @@ On Streamlit Community Cloud, add two secrets (Settings → Secrets):
 ```
 NEBIUS_API_KEY = "your_key_here"
 TAVILY_API_KEY = "tvly-..."
+SUPABASE_URL = "https://<project>.supabase.co"
+SUPABASE_KEY = "sb_publishable_..."
 ACCESS_CODE = "a code you give to the judges"
 ```
+
+The Supabase project needs one table, `learner_profiles` (`user_id` uuid
+primary key → `auth.users`, `profile` jsonb, `updated_at` timestamptz), with
+row-level security policies that allow a learner to select, insert and update
+only the row where `user_id = auth.uid()`.
 
 `TAVILY_API_KEY` is optional: without it, homework uses the book list only.
 
@@ -153,6 +164,7 @@ checked without typing. It uses the real API and saves to a separate
 |---|---|
 | `streamlit_app.py` | Web app: Explore / Study / My progress tabs |
 | `quantum_viz.py` | Exact qubit math + Bloch sphere and heat-map figures |
+| `store.py` | Learner accounts (Supabase Auth) and saving the profile |
 | `homework.py` | Builds the end-of-session assignment and saves it to the profile |
 | `resources.py` | Checked book sections, Tavily search on trusted sites, link checking |
 | `curriculum.py` | Learning path: step order, unlocking, what to study now |
