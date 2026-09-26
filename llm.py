@@ -46,7 +46,17 @@ def ask(prompt: str, temperature: float = 0.4) -> str:
     # Some reasoning models wrap their thinking in <think> tags; drop it.
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     # The terminal shows raw text, so stray Markdown bold markers are noise.
-    return text.replace("**", "").strip()
+    return tidy(text.replace("**", "")).strip()
+
+
+_SUPERSCRIPT = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+
+
+def tidy(text: str) -> str:
+    """Last line of defence against LaTeX leftovers the prompts forbid:
+    |a|^2 or |a|^{2} -> |a|²,  e^{iφ} -> e^(iφ)."""
+    text = re.sub(r"\^\{?([0-9]+)\}?", lambda m: m.group(1).translate(_SUPERSCRIPT), text)
+    return re.sub(r"\^\{([^{}]*)\}", r"^(\1)", text)          # e^{iπ/3} -> e^(iπ/3)
 
 
 def ask_json(prompt: str, temperature: float = 0.4) -> dict:

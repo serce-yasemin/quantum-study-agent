@@ -44,6 +44,8 @@ Write ONE learning objective: a single sentence starting with "The learner can .
   algebra). Do NOT introduce observables, measurements in other bases, gates,
   partial traces or anything else the material does not cover.
 
+Plain text only: no LaTeX. Write powers as |a|² and phases as e^(iφ).
+
 Reply with the sentence only.
 
 Study material:
@@ -265,7 +267,8 @@ Return JSON only:
 - "links": a list of 0-2 numbers of the most useful web resources
 - "task": 2-3 sentences telling the learner exactly what to read or watch and
   what to pay attention to (tie it to today's gap if there is one). About
-  20-30 minutes of work.
+  20-30 minutes of work. Refer to the book section and videos/pages by their
+  title - never by list number (the learner does not see the numbers).
 - "check_questions": exactly 2 objects {{"question", "expected_answer"}} that
   someone who did the homework can answer in 1-3 lines. They must be answerable
   from the study material below plus the homework - no new techniques.
