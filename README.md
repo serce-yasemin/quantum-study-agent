@@ -56,6 +56,7 @@ re-reading the text.
 - **Memory that stays with you** — sign in with e-mail + password and your
   learner profile (every attempt, weak point, review date and homework) is
   saved to your account after every step, so you can continue on any device.
+  Forgot your password? The app e-mails you a reset link.
   The model itself is stateless; the agent's memory is this profile. It is
   stored in Supabase with row-level security: each learner can read and write
   only their own row. Without an account set up (e.g. locally), the profile
@@ -76,7 +77,8 @@ re-reading the text.
 - [x] Week 4 (part 1) — homework: checked book sections + Tavily web search on
       trusted sites + code-verified links
 - [x] Week 4 (part 2) — homework check questions, session start review
-- [x] Learner accounts: profile saved to Supabase, works on any device
+- [x] Learner accounts: profile saved to Supabase, works on any device;
+      password reset by e-mail
 - [ ] Week 5 — a week of real daily use; demo built from real progress data
 
 ## Tech stack
@@ -108,7 +110,7 @@ pip3 install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
-On Streamlit Community Cloud, add two secrets (Settings → Secrets):
+On Streamlit Community Cloud, add these secrets (Settings → Secrets):
 
 ```
 NEBIUS_API_KEY = "your_key_here"
@@ -122,6 +124,19 @@ The Supabase project needs one table, `learner_profiles` (`user_id` uuid
 primary key → `auth.users`, `profile` jsonb, `updated_at` timestamptz), with
 row-level security policies that allow a learner to select, insert and update
 only the row where `user_id = auth.uid()`.
+
+E-mail links (sign-up confirmation, password reset) must open the app with the
+token in the query string, because a Streamlit app cannot read the `#...`
+part of a URL. In Supabase → Authentication:
+
+- URL Configuration → Site URL: the app's address
+- Emails → "Confirm signup" template link:
+  `{{ .SiteURL }}/?token_hash={{ .TokenHash }}&type=email`
+- Emails → "Reset password" template link:
+  `{{ .SiteURL }}/?token_hash={{ .TokenHash }}&type=recovery`
+- Emails → SMTP Settings: a real mail server. Supabase's built-in server only
+  delivers to members of the project's team, so other learners would never
+  get the e-mails.
 
 `TAVILY_API_KEY` is optional: without it, homework uses the book list only.
 

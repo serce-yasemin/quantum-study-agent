@@ -15,6 +15,7 @@ import os
 from datetime import datetime, timezone
 
 TABLE = "learner_profiles"
+APP_URL = os.environ.get("APP_URL", "https://quantum-study-agent.streamlit.app")
 
 
 def configured() -> bool:
@@ -40,6 +41,26 @@ def sign_up(client, email: str, password: str):
 def sign_in(client, email: str, password: str):
     res = client.auth.sign_in_with_password({"email": email, "password": password})
     return res.user
+
+
+def send_password_reset(client, email: str) -> None:
+    """E-mail a reset link. The link opens the app with ?token_hash=...&type=recovery
+    (set in the Supabase "Reset password" e-mail template), so the app can read it."""
+    client.auth.reset_password_for_email(email, {"redirect_to": APP_URL})
+
+
+def verify_link(client, token_hash: str, link_type: str):
+    """Check a token from an e-mail link. On success the client is signed in
+    as that user. Returns the user. Each token works only once."""
+    res = client.auth.verify_otp({"token_hash": token_hash, "type": link_type})
+    if res.user is None:
+        raise RuntimeError("This link is invalid or has expired.")
+    return res.user
+
+
+def set_password(client, new_password: str) -> None:
+    """Change the password of the user the client is signed in as."""
+    client.auth.update_user({"password": new_password})
 
 
 def load_profile(client, user_id: str) -> dict | None:

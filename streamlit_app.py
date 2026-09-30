@@ -69,14 +69,77 @@ EMPTY_PROFILE = {"learner": {"goal": "", "interests": []}, "concepts": {}, "assi
 
 
 # ---------------------------------------------------------------- accounts
+def finish_login(client, user) -> None:
+    """Load (or create) the learner's profile and open the app."""
+    profile = store.load_profile(client, user.id)
+    if profile is None:
+        profile = json.loads(json.dumps(EMPTY_PROFILE))
+        store.save_profile(client, user.id, profile)
+    ss.db, ss.user_id, ss.user_email = client, user.id, user.email
+    ss.profile, ss.saved = profile, store.fingerprint(profile)
+    ss.stage = "start"
+
+
+def read_email_link() -> None:
+    """E-mail links open the app as ?token_hash=...&type=recovery|email.
+    Check the token once, then remove it from the address bar."""
+    params = st.query_params
+    token, link_type = params.get("token_hash"), params.get("type")
+    if not token or link_type not in ("recovery", "email", "signup"):
+        return
+    st.query_params.clear()          # a token works only once - never re-use it
+    try:
+        client = store.new_client()
+        user = store.verify_link(client, token, link_type)
+    except Exception as exc:
+        ss.link_error = f"{exc} Please request a new link."
+        return
+    if link_type == "recovery":      # signed in, but must choose a new password first
+        ss.reset_client, ss.reset_user = client, user
+    else:                            # e-mail confirmed: sign straight in
+        finish_login(client, user)
+
+
+def new_password_form() -> None:
+    st.title("⚛️ Quantum Study Agent")
+    st.subheader("Choose a new password")
+    with st.form("new_password"):
+        first = st.text_input("New password", type="password",
+                              help="At least 6 characters.")
+        again = st.text_input("Repeat new password", type="password")
+        if st.form_submit_button("Save new password", type="primary"):
+            if len(first) < 6:
+                st.error("The password needs at least 6 characters.")
+            elif first != again:
+                st.error("The two passwords are not the same.")
+            else:
+                try:
+                    store.set_password(ss.reset_client, first)
+                    finish_login(ss.reset_client, ss.reset_user)
+                except Exception as exc:
+                    st.error(str(exc))
+                    st.stop()
+                del ss.reset_client, ss.reset_user
+                st.rerun()
+    st.stop()
+
+
 def account_gate() -> None:
     """Sign in so the learner profile follows the learner to any device."""
     if not store.configured() or ss.get("user_id"):
         return
+    read_email_link()
+    if ss.get("user_id"):
+        return
+    if ss.get("reset_user"):
+        new_password_form()
     st.title("⚛️ Quantum Study Agent")
     st.write("Sign in to keep your progress - it is saved to your account, so you "
              "can continue on any device.")
-    sign_in_tab, sign_up_tab = st.tabs(["Sign in", "Create account"])
+    if ss.get("link_error"):
+        st.error(ss.pop("link_error"))
+    sign_in_tab, sign_up_tab, forgot_tab = st.tabs(
+        ["Sign in", "Create account", "Forgot password?"])
     for tab, new in ((sign_in_tab, False), (sign_up_tab, True)):
         with tab, st.form(f"auth_{new}"):
             email = st.text_input("E-mail")
@@ -88,17 +151,24 @@ def account_gate() -> None:
                     client = store.new_client()
                     user = (store.sign_up if new else store.sign_in)(
                         client, email.strip(), password)
-                    profile = store.load_profile(client, user.id)
-                    if profile is None:
-                        profile = json.loads(json.dumps(EMPTY_PROFILE))
-                        store.save_profile(client, user.id, profile)
+                    finish_login(client, user)
                 except Exception as exc:
                     st.error(str(exc))
                     st.stop()
-                ss.db, ss.user_id, ss.user_email = client, user.id, user.email
-                ss.profile, ss.saved = profile, store.fingerprint(profile)
-                ss.stage = "start"
                 st.rerun()
+    with forgot_tab, st.form("forgot"):
+        st.write("We will e-mail you a link to choose a new password.")
+        email = st.text_input("E-mail", key="forgot_email")
+        if st.form_submit_button("Send reset link", type="primary"):
+            try:
+                store.send_password_reset(store.new_client(), email.strip())
+            except Exception as exc:
+                st.error(str(exc))
+                st.stop()
+            # Same message whether or not the address has an account,
+            # so the form cannot be used to find out who is signed up.
+            st.success("If an account exists for this address, a reset link is "
+                       "on its way.")
     st.stop()
 
 
