@@ -58,9 +58,19 @@ def verify_link(client, token_hash: str, link_type: str):
     return res.user
 
 
-def set_password(client, new_password: str) -> None:
-    """Change the password of the user the client is signed in as."""
+def set_password(client, email: str, new_password: str):
+    """Change the password of the user the client is signed in as, then sign
+    in again with it and return the user.
+
+    Why sign in again: supabase-py handles the "USER_UPDATED" event that
+    update_user fires by putting the public key back into the request headers.
+    Database requests made afterwards are then anonymous, so row level
+    security hides the learner's own profile (seen live: GET returned no row,
+    the insert was refused with 401). A fresh sign-in fires "SIGNED_IN",
+    which puts the learner's token back.
+    """
     client.auth.update_user({"password": new_password})
+    return sign_in(client, email, new_password)
 
 
 def load_profile(client, user_id: str) -> dict | None:

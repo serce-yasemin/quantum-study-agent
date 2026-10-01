@@ -114,8 +114,8 @@ def new_password_form() -> None:
                 st.error("The two passwords are not the same.")
             else:
                 try:
-                    store.set_password(ss.reset_client, first)
-                    finish_login(ss.reset_client, ss.reset_user)
+                    user = store.set_password(ss.reset_client, ss.reset_user.email, first)
+                    finish_login(ss.reset_client, user)
                 except Exception as exc:
                     st.error(str(exc))
                     st.stop()
