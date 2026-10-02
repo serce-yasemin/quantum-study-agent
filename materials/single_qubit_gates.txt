@@ -1,0 +1,50 @@
+Single-qubit gates X, Z and H: a short primer
+
+1. A gate is a matrix that acts on the state
+A quantum gate on one qubit is a 2×2 matrix U. It changes the state by
+multiplication: |ψ⟩ → U|ψ⟩. A gate must be unitary, U†U = I, where U† is the
+conjugate transpose. Unitary means lengths are kept: a normalized state stays
+normalized, so the probabilities still add up to 1. Every gate can be undone
+(by U†).
+
+2. X, the bit flip
+    X = [[0, 1], [1, 0]]
+X|0⟩ = |1⟩ and X|1⟩ = |0⟩: it swaps the two amplitudes, X[a; b] = [b; a].
+Example: X(0.6|0⟩ + 0.8|1⟩) = 0.8|0⟩ + 0.6|1⟩, so P(0) changes from 0.36 to 0.64.
+
+3. Z, the phase flip
+    Z = [[1, 0], [0, −1]]
+Z|0⟩ = |0⟩ and Z|1⟩ = −|1⟩: it flips the sign of the |1⟩ amplitude,
+Z[a; b] = [a; −b]. The probabilities P(0) and P(1) do not change, but the
+relative phase does: Z|+⟩ = |−⟩ and Z|−⟩ = |+⟩.
+
+4. H, the Hadamard gate
+    H = (1/√2)·[[1, 1], [1, −1]]
+H|0⟩ = |+⟩ and H|1⟩ = |−⟩; also H|+⟩ = |0⟩ and H|−⟩ = |1⟩. H turns a definite
+0 or 1 into an equal superposition, and back.
+Example: H(0.6|0⟩ + 0.8|1⟩) = (1/√2)[0.6 + 0.8; 0.6 − 0.8] = [0.990; −0.141],
+so P(0) = 0.98 and P(1) = 0.02.
+
+5. Doing a gate twice
+X·X = I, Z·Z = I and H·H = I: each of these three gates undoes itself.
+Order matters when gates are combined, and the gate applied first is written
+on the right. Example: H·Z·H = X, so "H, then Z, then H" is a bit flip.
+Likewise H·X·H = Z.
+
+6. Gates on the Bloch sphere
+Each gate turns the whole sphere rigidly by half a turn (180°):
+    X: about the x axis      (x, y, z) → (x, −y, −z)
+    Z: about the z axis      (x, y, z) → (−x, −y, z)
+    H: about the axis halfway between x and z      (x, y, z) → (z, −y, x)
+A state lying on the rotation axis does not move: X leaves |+⟩ and |−⟩ where
+they are, Z leaves |0⟩ and |1⟩ where they are.
+Example: 0.6|0⟩ + 0.8|1⟩ has Bloch vector (0.96, 0, −0.28); after H it is
+(−0.28, 0, 0.96), which gives P(0) = (1 + 0.96)/2 = 0.98 as before.
+
+7. Gates on a density matrix
+A density matrix changes as ρ → U·ρ·U†. A gate only rotates the Bloch vector,
+so its length - and with it the purity Tr(ρ²) - stays the same: a gate never
+turns a mixed state into a pure one, or the other way round.
+Example: ρ = [[0.8, 0.2], [0.2, 0.2]] has Bloch vector (0.4, 0, 0.6). After H,
+ρ = [[0.7, 0.3], [0.3, 0.3]] with Bloch vector (0.6, 0, 0.4). The purity is
+0.76 before and after.

@@ -1,0 +1,55 @@
+The Bloch sphere: a short primer
+
+1. One qubit, one point
+Every pure qubit state can be written, up to a global phase, as
+|ψ⟩ = cos(θ/2)|0⟩ + e^(iφ)·sin(θ/2)|1⟩. The two angles are exactly the two
+angles that locate a point on a sphere of radius 1:
+
+    x = sin θ · cos φ      y = sin θ · sin φ      z = cos θ
+
+θ is the tilt away from the top (0° to 180°) and φ is the turn around the
+vertical axis (0° to 360°). The arrow from the centre to this point is the
+Bloch vector r = (x, y, z).
+
+2. Six landmarks
+    |0⟩  → (0, 0, 1)  top            |1⟩  → (0, 0, −1)  bottom
+    |+⟩  → (1, 0, 0)                 |−⟩  → (−1, 0, 0)
+    |+i⟩ → (0, 1, 0)                 |−i⟩ → (0, −1, 0)
+The four superpositions sit on the equator (θ = 90°); they differ only in φ.
+
+3. A worked example
+θ = 60°, φ = 90°: x = sin 60°·cos 90° = 0, y = sin 60°·sin 90° = 0.866,
+z = cos 60° = 0.5. The point is (0, 0.866, 0.5).
+
+4. Height is probability
+The height z alone fixes the computational-basis probabilities:
+
+    P(0) = (1 + z)/2        P(1) = (1 − z)/2
+
+For the example, P(0) = (1 + 0.5)/2 = 0.75 and P(1) = 0.25. The angle φ does
+not appear: turning a state around the vertical axis changes its relative
+phase but not P(0) or P(1). All equator states have z = 0, so P(0) = 0.5.
+
+5. Opposite points are orthogonal states
+Two states that are orthogonal (⟨φ|ψ⟩ = 0) sit at opposite ends of a line
+through the centre: |0⟩ and |1⟩, |+⟩ and |−⟩, |+i⟩ and |−i⟩. Careful: the
+angle between two arrows on the sphere is twice the angle between the state
+vectors. That is why the formula uses θ/2: |0⟩ and |1⟩ are 180° apart on the
+sphere although they are perpendicular (90°) as vectors.
+
+6. Reading the point from a density matrix
+Every one-qubit density matrix is ρ = ½(I + x·σx + y·σy + z·σz), so
+
+    x = 2·Re(ρ₀₁)      y = −2·Im(ρ₀₁)      z = ρ₀₀ − ρ₁₁
+
+z comes from the diagonal (the probabilities); x and y come from the
+off-diagonal entry (the coherence).
+Example: ρ = [[0.8, 0.2], [0.2, 0.2]] gives x = 0.4, y = 0, z = 0.6.
+
+7. Surface or inside
+The length of the Bloch vector is |r| = √(x² + y² + z²). Pure states have
+|r| = 1 (on the surface); mixed states have |r| < 1 (inside); the maximally
+mixed state I/2 is the centre, |r| = 0. Purity and length are linked by
+Tr(ρ²) = ½(1 + |r|²).
+For the example, |r|² = 0.16 + 0 + 0.36 = 0.52, so |r| ≈ 0.72 < 1: the state
+is mixed, and Tr(ρ²) = ½(1 + 0.52) = 0.76.
