@@ -18,7 +18,8 @@ re-reading the text.
   them, inside the sphere, while the coherence and purity drop live. These
   numbers are computed exactly (numpy), not by the AI.
 - **A learning path that starts from the basics** — state vectors → outer
-  products → pure-state density matrices → mixed states. Each step has its own
+  products → pure-state density matrices → mixed states → the Bloch sphere →
+  single-qubit gates (X, Z, H). Each step has its own
   short built-in primer. A step unlocks when the one before it is mastered
   (all three levels passed): unlocking the next step is the reward. The agent
   recommends what to study now — a due review first, otherwise the next step
@@ -92,6 +93,7 @@ re-reading the text.
       password reset by e-mail
 - [x] Homework check with a follow-up question and review page; lesson
       cards with figures, warm-up and points
+- [x] Path steps 5 and 6: the Bloch sphere, single-qubit gates X, Z, H
 - [ ] Week 5 — a week of real daily use; demo built from real progress data
 
 ## Tech stack

@@ -417,6 +417,39 @@ def lesson_figure(concept: str) -> None:
             {"rho": rho_b, "label": "B |+⟩", "color": qv.COLOR_B},
             {"rho": rho, "label": "mixture", "color": qv.COLOR_MIX}], chord=True),
             width="stretch")
+    elif concept == "bloch_sphere":
+        st.caption("θ sets the height (the probabilities), φ turns the arrow "
+                   "around. Shorten the arrow to go inside: a mixed state.")
+        theta = st.slider("θ (tilt from the top, degrees)", 0, 180, 60, key="lf_bth")
+        phi = st.slider("φ (turn around the vertical axis, degrees)", 0, 359, 90,
+                        key="lf_bph")
+        r = st.slider("arrow length |r| (1 = pure)", 0.0, 1.0, 1.0, 0.05, key="lf_br")
+        th, ph = np.radians(theta), np.radians(phi)
+        x, y, z = (r * np.sin(th) * np.cos(ph), r * np.sin(th) * np.sin(ph),
+                   r * np.cos(th))
+        rho = qv.rho_from_bloch(x, y, z)
+        st.code(f"(x, y, z) = ({x + 0:.3f}, {y + 0:.3f}, {z + 0:.3f})\n"
+                f"P(0) = (1 + z)/2 = {(1 + z) / 2:.3f}    "
+                f"purity = {qv.purity(rho):.3f}", language=None)
+        st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": "state",
+                                         "color": qv.COLOR_A}]), width="stretch")
+    elif concept == "single_qubit_gates":
+        st.caption("Pick a start state and a gate. The gate turns the sphere half "
+                   "a turn around the dashed axis.")
+        names = list(qv.NAMED_STATES)
+        name = st.selectbox("Start state", names, index=0, key="lf_gstate")
+        gate = st.radio("Gate", list(qv.GATES), horizontal=True, key="lf_gate")
+        before = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES[name]))
+        after = qv.apply_gate(gate, before)
+        bx, by, bz = qv.bloch_vector(before) + 0.0
+        ax, ay, az = qv.bloch_vector(after) + 0.0
+        st.code(f"before: ({bx:.2f}, {by:.2f}, {bz:.2f})   P(0) = {(1 + bz) / 2:.2f}\n"
+                f"after {gate}: ({ax:.2f}, {ay:.2f}, {az:.2f})   "
+                f"P(0) = {(1 + az) / 2:.2f}", language=None)
+        st.plotly_chart(qv.bloch_figure([
+            {"rho": before, "label": f"before {name}", "color": qv.COLOR_A},
+            {"rho": after, "label": f"after {gate}", "color": qv.COLOR_B}],
+            axis=qv.GATE_AXES[gate]), width="stretch")
 
 
 def simple_picture(concept: str, key: str) -> None:
@@ -446,6 +479,22 @@ def simple_picture(concept: str, key: str) -> None:
              "color": qv.COLOR_MIX}], chord=True), width="stretch", key=f"spa_{key}")
         st.caption("A mixture sits on the straight line between A and B - inside "
                    "the ball, not on its surface.")
+    elif concept == "bloch_sphere":
+        theta = st.slider("Tilt the arrow", 0, 180, 60, key=f"sp_{key}")
+        st.plotly_chart(qv.height_figure(theta), width="stretch", key=f"spa_{key}")
+        st.plotly_chart(qv.chance_bar((1 + float(np.cos(np.radians(theta)))) / 2),
+                        width="stretch", key=f"spb_{key}")
+        st.caption("The sphere seen from the side. Only the height of the arrow tip "
+                   "decides the chances: top = always 0, bottom = always 1, "
+                   "middle = half and half.")
+    elif concept == "single_qubit_gates":
+        gate = st.radio("Gate", list(qv.GATES), horizontal=True, key=f"spg_{key}")
+        angle = st.slider("Start arrow (degrees from |0⟩)", 0, 359, 30, key=f"sp_{key}")
+        st.plotly_chart(qv.gate_slice_figure(gate, angle), width="stretch",
+                        key=f"spa_{key}")
+        st.caption("The sphere seen from the side. In this flat cut each gate works "
+                   "like a mirror on the dashed line (in 3D: half a turn around "
+                   "that line). An arrow lying on the line does not move.")
 
 
 def explain_again(text: str) -> None:

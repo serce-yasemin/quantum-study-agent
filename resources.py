@@ -48,6 +48,19 @@ BOOK_SECTIONS = {
          "pages": "101-105",
          "focus": "trace, positivity, pure versus mixed (tr ρ² test), Bloch vector of a mixed state"},
     ],
+    "bloch_sphere": [
+        {"book": NC, "section": "1.2 Quantum bits", "pages": "13-16",
+         "focus": "the angles θ and φ and the Bloch sphere picture (Figure 1.3, p. 15)"},
+        {"book": NC, "section": "2.4.2 General properties of the density operator",
+         "pages": "101-105",
+         "focus": "the Bloch vector of a mixed state (Exercise 2.72)"},
+    ],
+    "single_qubit_gates": [
+        {"book": NC, "section": "1.3.1 Single qubit gates", "pages": "17-20",
+         "focus": "the X, Z and Hadamard gates as matrices; H on the Bloch sphere"},
+        {"book": NC, "section": "4.2 Single qubit operations", "pages": "174-177",
+         "focus": "Pauli matrices, Hadamard, and gates as rotations of the Bloch sphere"},
+    ],
 }
 
 # Web search only looks at these sites (subdomains included).

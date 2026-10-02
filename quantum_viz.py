@@ -54,7 +54,28 @@ NAMED_STATES = {
 }
 
 
+GATES = {
+    "X": PAULI["x"],
+    "Z": PAULI["z"],
+    "H": (PAULI["x"] + PAULI["z"]) / np.sqrt(2),
+}
+# The axis each gate turns the Bloch sphere around (by half a turn).
+GATE_AXES = {"X": (1.0, 0.0, 0.0), "Z": (0.0, 0.0, 1.0),
+             "H": (1 / np.sqrt(2), 0.0, 1 / np.sqrt(2))}
+
+
 # ---------- math ----------
+
+def rho_from_bloch(x: float, y: float, z: float) -> np.ndarray:
+    """ρ = ½ (I + x·σx + y·σy + z·σz)"""
+    return 0.5 * (np.eye(2) + x * PAULI["x"] + y * PAULI["y"] + z * PAULI["z"])
+
+
+def apply_gate(gate: str, rho: np.ndarray) -> np.ndarray:
+    """ρ → U ρ U†"""
+    u = GATES[gate]
+    return u @ rho @ u.conj().T
+
 
 def pure_state(theta_deg: float, phi_deg: float) -> np.ndarray:
     th, ph = np.radians(theta_deg), np.radians(phi_deg)
@@ -90,7 +111,8 @@ def fmt_complex(z: complex, digits: int = 3) -> str:
 
 # ---------- figures ----------
 
-def bloch_figure(points: list[dict], chord: bool = False) -> go.Figure:
+def bloch_figure(points: list[dict], chord: bool = False,
+                 axis: tuple | None = None) -> go.Figure:
     """points: [{"rho": ndarray, "label": str, "color": hex}, ...]
     chord=True draws the dashed segment between the first two points - every
     mixture of them lies on it."""
@@ -132,6 +154,12 @@ def bloch_figure(points: list[dict], chord: bool = False) -> go.Figure:
                                    line=dict(color=INK, width=3, dash="dash"),
                                    name="all mixtures of A and B",
                                    hoverinfo="skip"))
+
+    if axis is not None:                    # the line a gate turns the sphere around
+        ax, ay, az = (1.25 * np.array(axis)).tolist()
+        fig.add_trace(go.Scatter3d(x=[-ax, ax], y=[-ay, ay], z=[-az, az], mode="lines",
+                                   line=dict(color=COLOR_MIX, width=5, dash="dash"),
+                                   name="rotation axis", hoverinfo="skip"))
 
     # State vectors: line from origin + marker at the tip, directly labeled.
     for pt in points:
@@ -282,3 +310,64 @@ def product_table_figure(theta_deg: float) -> go.Figure:
         font=dict(color=TEXT))
     return fig
 
+
+
+def _slice_base(fig: go.Figure) -> None:
+    """The flat cut through the Bloch sphere that holds |0⟩, |1⟩, |+⟩, |−⟩."""
+    t = np.linspace(0, 2 * np.pi, 120)
+    fig.add_trace(go.Scatter(x=np.cos(t), y=np.sin(t), mode="lines",
+                             line=dict(color=GRID, width=2), hoverinfo="skip"))
+    for (x, y, label) in ((0, 1.14, "|0⟩"), (0, -1.14, "|1⟩"),
+                          (1.16, 0, "|+⟩"), (-1.16, 0, "|−⟩")):
+        fig.add_annotation(x=x, y=y, text=label, showarrow=False,
+                           font=dict(color=INK, size=14))
+    axis = dict(range=[-1.45, 1.45], showgrid=False, zeroline=True,
+                zerolinecolor=GRID, showticklabels=False, fixedrange=True)
+    fig.update_layout(
+        xaxis=axis, yaxis=dict(scaleanchor="x", **axis), showlegend=False,
+        height=360, margin=dict(l=10, r=10, t=10, b=10),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT))
+
+
+def _slice_arrow(fig: go.Figure, x: float, z: float, color: str, label: str) -> None:
+    fig.add_annotation(x=x, y=z, ax=0, ay=0, xref="x", yref="y", axref="x", ayref="y",
+                       arrowhead=3, arrowsize=1.2, arrowwidth=4, arrowcolor=color,
+                       text="")
+    fig.add_annotation(x=1.13 * x, y=1.13 * z, text=label, showarrow=False,
+                       font=dict(color=color, size=14))
+
+
+def height_figure(theta_deg: float) -> go.Figure:
+    """Side view of the Bloch sphere: the height z of the arrow tip sets the
+    chance of measuring 0, P(0) = (1 + z)/2."""
+    th = np.radians(theta_deg)
+    x, z = float(np.sin(th)), float(np.cos(th))
+    fig = go.Figure()
+    _slice_base(fig)
+    fig.add_shape(type="line", x0=0, y0=z, x1=x, y1=z,
+                  line=dict(color=INK, width=1, dash="dash"))
+    fig.add_shape(type="line", x0=-1.4, y0=-1, x1=-1.4, y1=1,      # height ruler
+                  line=dict(color=INK, width=2))
+    fig.add_trace(go.Scatter(x=[-1.4], y=[z], mode="markers",
+                             marker=dict(color=COLOR_A, size=12), hoverinfo="skip"))
+    fig.add_annotation(x=-1.37, y=z, xanchor="left", yanchor="bottom", showarrow=False,
+                       text=f"height z = {z:.2f}", font=dict(color=COLOR_A, size=13))
+    _slice_arrow(fig, x, z, COLOR_A, "|ψ⟩")
+    return fig
+
+
+def gate_slice_figure(gate: str, angle_deg: float) -> go.Figure:
+    """Before and after a gate, for a state in the flat cut through |0⟩, |+⟩,
+    |1⟩, |−⟩. In this cut each gate acts like a mirror (dashed line)."""
+    a = np.radians(angle_deg)
+    x, z = float(np.sin(a)), float(np.cos(a))
+    x2, _, z2 = bloch_vector(apply_gate(gate, rho_from_bloch(x, 0.0, z)))
+    mirror = {"X": (1.3, 0.0), "Z": (0.0, 1.3), "H": (0.95, 0.95)}[gate]
+    fig = go.Figure()
+    _slice_base(fig)
+    fig.add_shape(type="line", x0=-mirror[0], y0=-mirror[1], x1=mirror[0], y1=mirror[1],
+                  line=dict(color=COLOR_MIX, width=3, dash="dash"))
+    _slice_arrow(fig, x, z, COLOR_A, "before")
+    _slice_arrow(fig, float(x2), float(z2), COLOR_B, f"after {gate}")
+    return fig
