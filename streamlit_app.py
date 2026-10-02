@@ -204,9 +204,11 @@ st.caption("A personal, stateful study agent for quantum computing · "
            "NVIDIA Nemotron on Nebius Token Factory")
 if ss.get("user_id"):
     left, right = st.columns([4, 1])
-    left.caption(f"Signed in as {ss.user_email} · progress is saved automatically")
+    left.caption(f"Signed in as {ss.user_email} · progress is saved automatically"
+                 f" · ⭐ {ss.profile.get('points', 0)} points")
     if right.button("Sign out"):
         autosave()
+        store.sign_out(ss.db)
         for key in list(ss.keys()):
             if key != "unlocked":
                 del ss[key]
@@ -359,9 +361,136 @@ def begin_session(concept: str, material: str, keep_gaps: bool = False) -> None:
 def start_level() -> None:
     material = ss.material
     ss.objective = call(tutor.learning_objective, material, ss.concept, ss.level)
-    ss.lesson = call(tutor.micro_lesson, material, ss.concept, ss.level, ss.objective)
+    ss.cards = call(tutor.lesson_cards, material, ss.concept, ss.level, ss.objective)
+    # If the model's cards do not have the right shape, teach the old way:
+    # one plain lesson text. The learner always gets a lesson.
+    ss.lesson = (None if ss.cards else
+                 call(tutor.micro_lesson, material, ss.concept, ss.level, ss.objective))
+    ss.card, ss.simpler, ss.try_pick = 0, {}, None
     ss.wrong_this_level = 0
     ss.stage = "lesson"
+
+
+def add_points(n: int, why: str) -> None:
+    """Points: +1 lesson finished, +1 warm-up right, +1/+2/+3 for a correct
+    answer at level 1/2/3. Saved in the learner profile."""
+    ss.profile["points"] = ss.profile.get("points", 0) + n
+    st.toast(f"⭐ +{n} · {why}")
+
+
+CARD_NAMES = ["You already know", "The new idea", "Worked example", "Your turn"]
+
+
+def lesson_figure(concept: str) -> None:
+    """A small interactive picture for the concept, drawn by our own code
+    (exact numbers - nothing here comes from the model)."""
+    if concept == "state_vector":
+        st.caption("Move the sliders: θ changes the probabilities, φ only turns "
+                   "the arrow around the vertical axis.")
+        theta = st.slider("θ (tilt from |0⟩, degrees)", 0, 180, 60, key="lf_th")
+        phi = st.slider("φ (relative phase, degrees)", 0, 359, 0, key="lf_ph")
+        rho = qv.density_from_state(qv.pure_state(theta, phi))
+        a, b = np.cos(np.radians(theta) / 2), np.sin(np.radians(theta) / 2)
+        st.code(f"|ψ⟩ = {a:.3f}|0⟩ + {b:.3f}·e^(i·{phi}°)|1⟩\n"
+                f"P(0) = {a * a:.3f}    P(1) = {b * b:.3f}    sum = 1", language=None)
+        st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": "|ψ⟩",
+                                         "color": qv.COLOR_A}]), width="stretch")
+    elif concept in ("outer_product", "density_matrix"):
+        st.caption("Pick a state: the matrix is |ψ⟩⟨ψ|. Diagonal = probabilities, "
+                   "off-diagonal = coherence (it carries the phase).")
+        names = list(qv.NAMED_STATES)
+        name = st.selectbox("State", names, index=names.index("|+⟩"), key="lf_state")
+        rho = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES[name]))
+        st.plotly_chart(qv.matrix_figure(rho, f"ρ = |ψ⟩⟨ψ| for {name}"), width="stretch")
+        st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": name,
+                                         "color": qv.COLOR_A}]), width="stretch")
+    elif concept == "mixed_state":
+        st.caption("Slide p: the mixture moves along the straight line between "
+                   "A and B, inside the sphere - purity drops below 1.")
+        p = st.slider("p = probability of |0⟩ (the rest is |+⟩)", 0.0, 1.0, 0.5, 0.05,
+                      key="lf_p")
+        rho_a = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES["|0⟩"]))
+        rho_b = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES["|+⟩"]))
+        rho = qv.mix(p, rho_a, rho_b)
+        st.metric("purity Tr(ρ²)", f"{qv.purity(rho):.3f}")
+        st.plotly_chart(qv.bloch_figure([
+            {"rho": rho_a, "label": "A |0⟩", "color": qv.COLOR_A},
+            {"rho": rho_b, "label": "B |+⟩", "color": qv.COLOR_B},
+            {"rho": rho, "label": "mixture", "color": qv.COLOR_MIX}], chord=True),
+            width="stretch")
+
+
+def explain_again(text: str) -> None:
+    """'I didn't get it' - the same card, said more simply."""
+    i = ss.card
+    if ss.simpler.get(i):
+        st.info(ss.simpler[i])
+    elif st.button("🤔 I didn't get it - explain it differently", key=f"simpler_{i}"):
+        with st.spinner("Finding another way to say it…"):
+            ss.simpler[i] = call(tutor.explain_differently, concept_title(ss.concept),
+                                 ss.objective, text)
+        st.rerun()
+
+
+def lesson_cards_view() -> None:
+    """The lesson as four small cards, one at a time."""
+    cards, i = ss.cards, ss.card
+    st.progress((i + 1) / 4, text=f"Card {i + 1} of 4 · {CARD_NAMES[i]}")
+    if i == 0:
+        st.markdown(f"#### 🧩 {CARD_NAMES[0]}")
+        st.write(cards["bridge"])
+        explain_again(cards["bridge"])
+    elif i == 1:
+        st.markdown(f"#### 💡 {CARD_NAMES[1]}")
+        has_figure = ss.concept in curriculum.BY_ID
+        left, right = st.columns([1, 1]) if has_figure else (st.container(), None)
+        with left:
+            st.code(cards["idea"], language=None, wrap_lines=True)
+            explain_again(cards["idea"])
+        if has_figure:
+            with right:
+                lesson_figure(ss.concept)
+    elif i == 2:
+        st.markdown(f"#### ✏️ {CARD_NAMES[2]}")
+        for n, step in enumerate(cards["example"], 1):
+            st.code(f"{n}. {step['step']}", language=None, wrap_lines=True)
+            st.caption(f"↳ why: {step['why']}")
+        explain_again("\n".join(f"{x['step']} ({x['why']})" for x in cards["example"]))
+    else:
+        t = cards["try_it"]
+        st.markdown(f"#### 🎯 {CARD_NAMES[3]}")
+        st.caption("A warm-up. It does not count for your level - just try.")
+        if ss.try_pick is None:
+            pick = st.radio(t["question"], t["options"], index=None, key=f"try_{ss.level}")
+            if st.button("Check", type="primary", disabled=pick is None):
+                ss.try_pick = t["options"].index(pick)
+                if ss.try_pick == t["correct"]:
+                    add_points(1, "warm-up right")
+                st.rerun()
+        else:
+            st.markdown(f"**{t['question']}**")
+            for n, option in enumerate(t["options"]):
+                mark = ("✅" if n == t["correct"] else
+                        "❌" if n == ss.try_pick else "▫️")
+                st.write(f"{mark} {option}")
+            if ss.try_pick == t["correct"]:
+                st.success(f"Right! {t['explanation']}")
+            else:
+                st.warning(f"Not this time - and that is fine here. {t['explanation']}")
+
+    back, forward = st.columns(2)
+    if i > 0 and back.button("← Back", width="stretch"):
+        ss.card -= 1
+        st.rerun()
+    if i < 3:
+        if forward.button("Continue →", type="primary", width="stretch"):
+            ss.card += 1
+            st.rerun()
+    elif ss.try_pick is not None:
+        if forward.button("Start the questions →", type="primary", width="stretch"):
+            add_points(1, "lesson finished")
+            next_question()
+            st.rerun()
 
 
 def next_question() -> None:
@@ -401,7 +530,7 @@ def welcome_back() -> None:
                 st.caption(f"Checked {len(a['checks'])}x so far - not passed yet.")
             if a["check_questions"]:
                 if st.button("I did it - check me", key=f"check_{a['id']}"):
-                    ss.checking, ss.check_results = a["id"], None
+                    ss.checking, ss.check_results, ss.check_extra = a["id"], None, None
                     ss.stage = "check"
                     st.rerun()
             elif st.button("Mark as done", key=f"done_{a['id']}"):
@@ -411,38 +540,77 @@ def welcome_back() -> None:
 
 
 def check_homework() -> None:
-    """Two short questions that someone who did the homework can answer."""
+    """Two short questions that someone who did the homework can answer.
+
+    2/2 right -> done. One wrong -> one extra question on that gap.
+    Extra wrong, or both wrong -> a short review page on what is missing.
+    """
     a = next(x for x in ss.profile["assignments"] if x["id"] == ss.checking)
     st.subheader(f"Homework check · #{a['id']} {concept_title(a['concept'])}")
-    if ss.get("check_results") is None:
+    check = ss.get("check_results")
+    if check is None:
         st.write("Answer in a line or two - no need to be formal.")
         answers = [st.text_area(q["question"], key=f"hw_{a['id']}_{i}", height=100)
                    for i, q in enumerate(a["check_questions"])]
         if st.button("Check my answers", type="primary",
                      disabled=not all(x.strip() for x in answers)):
-            ss.check_results = call(homework.check, a, answers)
+            with st.spinner("Checking your answers…"):
+                ss.check_results = call(homework.check, a, answers)
+            ss.check_extra = None
             st.rerun()
         if st.button("Back"):
             ss.stage = "start"
             st.rerun()
         return
 
-    for r, q in zip(ss.check_results, a["check_questions"]):
+    def show(r: dict) -> None:
         st.markdown(f"**{r['question']}**  \nYour answer: {r['answer']}")
         if r["correct"]:
             st.success(f"✅ {r['feedback']}")
         else:
             st.error(f"Not yet - {r['feedback']}")
             with st.expander("Expected answer"):
-                st.write(q["expected_answer"])
-    if a["status"] == "done":
+                st.write(r["expected_answer"])
+
+    def review_pages(pages: list[str]) -> None:
+        st.markdown("#### 📖 What is missing")
+        st.write("Read this, then have another look at the homework resources. "
+                 "The gap will also come up in your next questions.")
+        for page in pages:
+            st.code(page, language=None, wrap_lines=True)
+
+    for r in check["results"]:
+        show(r)
+    extra, extra_done = check["extra"], ss.get("check_extra")
+
+    if a["status"] == "done" and not extra:
         st.balloons()
         st.success("Homework done! 🎉")
-    else:
-        st.warning("Not passed yet - have another look at the resources; the gap "
-                   "will also come up in your next questions. You can retry later.")
+    elif check["reviews"]:                       # both wrong: teach, no extra question
+        st.warning("Both answers need work, so here is a short review instead of "
+                   "another question. The homework stays open - retry it later.")
+        review_pages(check["reviews"])
+    elif extra and extra_done is None:           # one wrong: one more question
+        st.info("One miss. One more question on that idea - get it right and the "
+                "homework counts as done.")
+        answer = st.text_area(extra["question"], key=f"hw_{a['id']}_extra", height=100)
+        if st.button("Check this answer", type="primary", disabled=not answer.strip()):
+            with st.spinner("Checking…"):
+                ss.check_extra = call(homework.check_extra, a, extra, answer.strip())
+            st.rerun()
+        return
+    elif extra:
+        st.divider()
+        show(extra_done["result"])
+        if a["status"] == "done":
+            st.balloons()
+            st.success("That was just a slip - homework done! 🎉")
+        else:
+            st.warning("This idea is not solid yet. The homework stays open - "
+                       "retry it later.")
+            review_pages([extra_done["review"]])
     if st.button("Back to start", type="primary"):
-        ss.stage, ss.check_results = "start", None
+        ss.stage, ss.check_results, ss.check_extra = "start", None, None
         st.rerun()
 
 
@@ -495,12 +663,15 @@ with tab_study:
         if ss.stage == "lesson":
             st.subheader(f"Lesson · {tutor.DIFFICULTY_NAMES[ss.level]}")
             st.success(f"**Goal:** {ss.objective}")
-            st.code(ss.lesson, language=None, wrap_lines=True)
-            st.caption("Tip: open the 🔭 Explore tab to see any matrix from this "
-                       "lesson on the Bloch sphere.")
-            if st.button("I'm ready - ask me", type="primary"):
-                next_question()
-                st.rerun()
+            if ss.cards:
+                lesson_cards_view()
+            else:
+                st.code(ss.lesson, language=None, wrap_lines=True)
+                st.caption("Tip: open the 🔭 Explore tab to see any matrix from this "
+                           "lesson on the Bloch sphere.")
+                if st.button("I'm ready - ask me", type="primary"):
+                    next_question()
+                    st.rerun()
 
         elif ss.stage == "question":
             st.subheader("Question")
@@ -517,6 +688,8 @@ with tab_study:
                                                       result.get("weak_point"))
                 ss.result, ss.passed, ss.last_answer = result, passed, answer
                 ss.review = None
+                if result["correct"]:
+                    add_points(ss.level, f"correct at level {ss.level}")
                 if not result["correct"]:
                     ss.wrong_this_level += 1
                     ss.session_weak = result.get("weak_point") or ss.session_weak
@@ -624,6 +797,9 @@ with tab_study:
 # ================================================================ PROFILE
 with tab_profile:
     st.subheader("Your learner profile")
+    st.metric("⭐ Points", ss.profile.get("points", 0),
+              help="+1 for finishing a lesson, +1 for a right warm-up, "
+                   "+1 / +2 / +3 for a correct answer at level 1 / 2 / 3.")
     where = ("It is saved to your account after every step, so you can continue "
              "on any device." if ss.get("user_id") else
              "It lives only in this browser session; download it to keep it, "

@@ -23,9 +23,16 @@ re-reading the text.
   (all three levels passed): unlocking the next step is the reward. The agent
   recommends what to study now — a due review first, otherwise the next step
   on your path. Already know the basics? Turn on "skip ahead".
-- **Teach first, then ask** — each level opens with a short lesson card
-  (max ~120 words, one idea, one tiny worked example, matrices drawn as text
-  grids). It assumes you have *not* read the material yet.
+- **Teach first, then ask** — each level opens with a lesson in four small
+  cards, one at a time: *you already know* → *the new idea* (next to an
+  interactive figure drawn by our own code) → *a worked example*, one
+  operation per line with its reason → *your turn*, a multiple-choice warm-up
+  that does not count for your level. Every card has an "I didn't get it"
+  button that explains the same thing more simply, with an everyday
+  comparison. The model writes the cards; code checks their shape, shuffles
+  the answer options, and falls back to a plain lesson if anything is off.
+- **Points** — +1 for finishing a lesson, +1 for a right warm-up, and
+  +1 / +2 / +3 for a correct answer at level 1 / 2 / 3.
 - **Short rounds, your choice** — a round is at most 5 questions. After each
   round you choose: *keep going* (another round; if you just mastered a step,
   the next step on your path) or *done for today*, which gives you homework
@@ -49,8 +56,11 @@ re-reading the text.
   model only *picks* from these lists by number.
 - **Did you really do the homework?** — each assignment stores two check
   questions. When you say "I did it", the agent asks them and grades your
-  answers. Both right: homework done. Otherwise it stays open, and the gap it
-  found is fed into your next practice questions.
+  answers. Both right: homework done. One wrong: one more question on that
+  idea, to tell a slip from a real gap - right means done; wrong means a short
+  review page on exactly what is missing. Both wrong: the review page straight
+  away. While homework stays open, the gap is fed into your next practice
+  questions.
 - **Welcome back** — every session starts with what is waiting for you:
   homework to check and spaced-repetition reviews that are due.
 - **Memory that stays with you** — sign in with e-mail + password and your
@@ -79,6 +89,8 @@ re-reading the text.
 - [x] Week 4 (part 2) — homework check questions, session start review
 - [x] Learner accounts: profile saved to Supabase, works on any device;
       password reset by e-mail
+- [x] Homework check with a follow-up question and review page; lesson
+      cards with figures, warm-up and points
 - [ ] Week 5 — a week of real daily use; demo built from real progress data
 
 ## Tech stack

@@ -3,6 +3,8 @@ Tutor logic: generate a question at a given difficulty, grade the
 learner's answer, and write a short review page when they get stuck.
 """
 
+import random
+
 from llm import ask, ask_json
 
 # Physics conventions every prompt must follow, so lessons, questions, grading
@@ -294,3 +296,135 @@ Study material:
     return {"book": book, "links": list(dict.fromkeys(chosen))[:2],
             "task": str(raw.get("task") or "").strip(),
             "check_questions": checks[:2]}
+
+
+def gap_question(material: str, concept: str, missed_question: dict,
+                 student_answer: str, gap: str | None) -> dict:
+    """One more check question after a miss in the homework check.
+
+    It tests the SAME gap from a different angle, so we can tell a slip
+    from a real misunderstanding. Returns {"question", "expected_answer"}.
+    """
+    prompt = f"""A student did homework on "{concept}" and then missed this check question.
+
+Question: {missed_question["question"]}
+Correct answer: {missed_question["expected_answer"]}
+Student's answer: \"\"\"{student_answer}\"\"\"
+Identified gap: {gap or "unknown"}
+
+Write ONE new short question that tests the SAME idea from a different angle
+or with different numbers. Someone who understands the idea can answer it in
+1-3 lines. Do not repeat the original question. No new techniques.
+
+Return JSON with these keys:
+- "question": the question text
+- "expected_answer": a correct model answer in 1-3 lines
+
+{CONVENTIONS}
+
+Formatting: plain text only. No LaTeX, no Markdown. Use Unicode symbols
+(ρ, ψ, ⟨ ⟩, ², √).
+
+Study material:
+\"\"\"
+{material}
+\"\"\"
+"""
+    raw = ask_json(prompt, temperature=0.5)
+    return {"question": str(raw.get("question") or "").strip(),
+            "expected_answer": str(raw.get("expected_answer") or "").strip()}
+
+
+def lesson_cards(material: str, concept: str, difficulty: int,
+                 objective: str) -> dict | None:
+    """A lesson in four small cards instead of one block of text.
+
+    1. bridge   - start from something the learner already knows
+    2. idea     - the one new idea (the app shows a figure next to it)
+    3. example  - a worked example, ONE operation per step, each with its reason
+    4. try_it   - a multiple-choice warm-up; not graded, costs nothing
+
+    The model writes the cards; our code checks their shape and shuffles the
+    answer options (models tend to put the right answer first). Returns None
+    if the reply does not have the right shape - the caller then falls back
+    to the plain one-card lesson.
+    """
+    prompt = f"""Teach a beginner the concept "{concept}" in four small cards.
+Teach exactly this objective and nothing beyond it: {objective}
+Assume they have NOT read the study material and know only basic linear algebra
+(vectors, matrices, complex numbers).
+
+Return JSON with these keys:
+- "bridge": at most 2 short sentences (max 30 words). Start from something they already know and
+  say what is about to be new. No formulas beyond one tiny one.
+- "idea": the ONE new idea, max 45 words, short sentences. The figure next
+  to it does the showing - do not describe what a picture could show. Draw any vector or
+  matrix as a small text grid on its own lines.
+- "example": a worked example with small numbers, as a list of 3-5 steps.
+  Each step is an object {{"step": what is written or computed in this line,
+  "why": one short reason}}. ONE operation per step - never skip a line.
+- "try_it": a warm-up of the SAME type as the example but with different
+  numbers: {{"question": ..., "options": [exactly 3 short answers, only one
+  correct], "correct": index of the correct option (0, 1 or 2),
+  "explanation": 1-2 sentences why}}. The wrong options must be the typical
+  beginner mistakes, not nonsense.
+
+{CONVENTIONS}
+
+Formatting: plain text only inside every string. No LaTeX, no HTML, no
+Markdown. Unicode symbols are fine (ρ, ψ, ⟨ ⟩, |0⟩, ², √, †). Write powers
+as |a|² and phases as e^(iφ).
+
+Study material (use it as the source of truth):
+\"\"\"
+{material}
+\"\"\"
+"""
+    raw = ask_json(prompt, temperature=0.4)
+    try:
+        steps = [{"step": str(x["step"]).strip(), "why": str(x["why"]).strip()}
+                 for x in raw["example"] if x.get("step")]
+        t = raw["try_it"]
+        options = [str(o).strip() for o in t["options"]]
+        correct = int(t["correct"])
+        cards = {"bridge": str(raw["bridge"]).strip(), "idea": str(raw["idea"]).strip(),
+                 "example": steps[:6]}
+        if (not cards["bridge"] or not cards["idea"] or len(steps) < 2
+                or len(options) < 2 or len(set(options)) != len(options)
+                or not 0 <= correct < len(options) or not str(t["question"]).strip()):
+            return None
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
+    right = options[correct]
+    random.shuffle(options)
+    cards["try_it"] = {"question": str(t["question"]).strip(), "options": options,
+                       "correct": options.index(right),
+                       "explanation": str(t.get("explanation") or "").strip()}
+    return cards
+
+
+def explain_differently(concept: str, objective: str, text: str) -> str:
+    """The learner pressed "I didn't get it": say the same thing more simply,
+    with an everyday comparison. Same content, no new facts."""
+    prompt = f"""A beginner studying "{concept}" did not understand this explanation:
+
+\"\"\"
+{text}
+\"\"\"
+
+The goal of the lesson: {objective}
+
+Explain the SAME thing again, differently:
+- Max 110 words, very short sentences, everyday words.
+- Start with ONE everyday comparison (label it "Picture it:"). Then say in one
+  sentence where the comparison stops being exact (label it "But careful:").
+- Then restate the idea in plain words with the smallest possible numbers.
+- Do not add any new fact, formula or technique.
+
+{CONVENTIONS}
+
+Formatting: plain text only. No LaTeX, no HTML, no Markdown. Unicode symbols
+are fine.
+"""
+    return ask(prompt, temperature=0.6)
+

@@ -189,8 +189,18 @@ def check_open_homework() -> None:
         for q in a["check_questions"]:
             print(f"\nCheck: {q['question']}")
             answers.append(read_answer({"hint": None}))
-        for r in homework.check(a, answers):
+        check = homework.check(a, answers)
+        for r in check["results"]:
             print(f"  {'CORRECT' if r['correct'] else 'NOT YET'} - {r['feedback']}")
+        reviews = check["reviews"]
+        if check["extra"]:                      # one miss -> one more question
+            print(f"\nOne more on that idea: {check['extra']['question']}")
+            extra = homework.check_extra(a, check["extra"], read_answer({"hint": None}))
+            r = extra["result"]
+            print(f"  {'CORRECT' if r['correct'] else 'NOT YET'} - {r['feedback']}")
+            reviews = [extra["review"]] if extra["review"] else []
+        for page in reviews:
+            print("\n--- What is missing ---\n" + page)
         print("Homework done!" if a["status"] == "done" else
               "Not passed yet - have another look; you can retry next time.")
         profile_store.save(profile)

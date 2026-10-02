@@ -43,6 +43,15 @@ def sign_in(client, email: str, password: str):
     return res.user
 
 
+def sign_out(client) -> None:
+    """End the session on the server too, so this client stops refreshing its
+    token in the background. Never blocks signing out in the app."""
+    try:
+        client.auth.sign_out()
+    except Exception:
+        pass
+
+
 def send_password_reset(client, email: str) -> None:
     """E-mail a reset link. The link opens the app with ?token_hash=...&type=recovery
     (set in the Supabase "Reset password" e-mail template), so the app can read it."""
