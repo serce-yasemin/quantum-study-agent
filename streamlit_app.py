@@ -41,8 +41,7 @@ import store  # noqa: E402
 import quantum_viz as qv  # noqa: E402
 import tutor  # noqa: E402
 
-MAX_QUESTIONS = 5
-MAX_WRONG_PER_LEVEL = 2
+MAX_WRONG_PER_LEVEL = 2   # after this many misses at a level: back to the lesson
 NEED = profile_store.CORRECT_IN_A_ROW_TO_PASS
 
 
@@ -344,7 +343,7 @@ def call(fn, *args):
 
 
 def begin_session(concept: str, material: str, keep_gaps: bool = False) -> None:
-    """Start a session of up to MAX_QUESTIONS on one concept."""
+    """Start a session on one concept. It runs until the learner stops it."""
     ss.concept, ss.material = concept, material
     ss.homework = None
     if not keep_gaps:
@@ -526,10 +525,6 @@ def lesson_cards_view() -> None:
 
 
 def next_question() -> None:
-    if len(ss.asked) >= MAX_QUESTIONS:
-        ss.stage = "done"
-        ss.end_reason = f"That's {MAX_QUESTIONS} questions - enough for today."
-        return
     c = concept_record()
     weak = [h["weak_point"] for h in c["history"] if h["weak_point"]]
     weak += [g for a in ss.profile.get("assignments", []) if a["concept"] == ss.concept
@@ -649,11 +644,11 @@ def check_homework() -> None:
 with tab_study:
     if ss.stage == "start":
         welcome_back()
-        st.subheader("Start a short session")
+        st.subheader("Start a session")
         st.write("One idea at a time: a short lesson, then questions that climb "
                  "**recall → apply → transfer**. Pass a level with "
-                 f"**{NEED} correct answers in a row**. Max {MAX_QUESTIONS} questions "
-                 "per session - come back tomorrow for the rest.")
+                 f"**{NEED} correct answers in a row**. Study as long as you like - "
+                 "press *Finish for today* whenever you want to stop.")
         st.markdown("#### Your learning path")
         path_overview()
         rec_id, reason = curriculum.recommend(ss.profile)
@@ -687,8 +682,8 @@ with tab_study:
 
     else:
         c = concept_record()
-        st.progress(min(len(ss.asked), MAX_QUESTIONS) / MAX_QUESTIONS,
-                    text=f"Question {len(ss.asked)}/{MAX_QUESTIONS} · Level {ss.level}/3 "
+        st.progress(min(c["level"] * NEED + c["streak"], 3 * NEED) / (3 * NEED),
+                    text=f"Question {len(ss.asked)} · Level {ss.level}/3 "
                          f"({tutor.DIFFICULTY_NAMES.get(ss.level, '')}) · "
                          f"streak {c['streak']}/{NEED}")
 
@@ -729,6 +724,12 @@ with tab_study:
                                      result.get("weak_point") or "", ss.question, answer)
                 ss.stage = "feedback"
                 st.rerun()
+            if st.button("Finish for today", key="stop_in_question"):
+                ss.asked.pop()                       # this one was not answered
+                ss.stage = "done"
+                ss.end_reason = (f"{len(ss.asked)} questions today. "
+                                 f"Next review: {c['next_review'] or 'not set yet'}.")
+                st.rerun()
 
         elif ss.stage == "feedback":
             st.subheader("Question")
@@ -748,25 +749,25 @@ with tab_study:
                 st.success(f"Level {ss.level} passed ({NEED} correct in a row)!")
 
             if not ss.result["correct"] and ss.wrong_this_level >= MAX_WRONG_PER_LEVEL:
-                label, action = "Finish for today", "stop"
+                st.info(f"{MAX_WRONG_PER_LEVEL} misses at this level - let's look at "
+                        "the lesson once more, then try fresh questions.")
+                label, action = "Back to the lesson →", "relearn"
             elif ss.passed and ss.level >= profile_store.MAX_LEVEL:
                 label, action = "Finish - concept mastered!", "mastered"
-            elif len(ss.asked) >= MAX_QUESTIONS:
-                label, action = "Finish for today", "limit"
             elif ss.passed:
                 label, action = "Next level →", "level"
             else:
                 label, action = "Next question →", "question"
 
-            if st.button(label, type="primary"):
-                if action == "stop":
-                    ss.stage = "done"
-                    ss.end_reason = (f"Let's stop here for today. Review is scheduled "
-                                     f"for {c['next_review']}.")
-                elif action == "limit":
-                    ss.stage = "done"
-                    ss.end_reason = (f"That's {MAX_QUESTIONS} questions - enough for "
-                                     f"today. Next review: {c['next_review']}.")
+            go, stop = st.columns([2, 1])
+            if action != "mastered" and stop.button("Finish for today", width="stretch"):
+                ss.stage = "done"
+                ss.end_reason = (f"{len(ss.asked)} questions today. "
+                                 f"Next review: {c['next_review'] or 'not set yet'}.")
+                st.rerun()
+            if go.button(label, type="primary", width="stretch"):
+                if action == "relearn":
+                    start_level()
                 elif action == "mastered":
                     ss.stage = "done"
                     title = curriculum.BY_ID.get(ss.concept, {}).get("title", ss.concept)
@@ -796,10 +797,9 @@ with tab_study:
                     nxt, _ = curriculum.recommend(ss.profile)
                 else:
                     nxt = ss.concept
-                st.caption("Short sessions help memory stick, but it is your call.")
+                st.caption("Stop here and get homework, or carry on.")
                 col1, col2 = st.columns(2)
-                if col1.button(f"Keep going: {MAX_QUESTIONS} more questions on "
-                               f"{concept_title(nxt)}", width="stretch"):
+                if col1.button(f"Keep going with {concept_title(nxt)}", width="stretch"):
                     material = (curriculum.material(nxt) if nxt in curriculum.BY_ID
                                 else ss.material)
                     begin_session(nxt, material, keep_gaps=True)

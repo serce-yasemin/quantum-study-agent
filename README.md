@@ -33,10 +33,11 @@ re-reading the text.
   the answer options, and falls back to a plain lesson if anything is off.
 - **Points** — +1 for finishing a lesson, +1 for a right warm-up, and
   +1 / +2 / +3 for a correct answer at level 1 / 2 / 3.
-- **Short rounds, your choice** — a round is at most 5 questions. After each
-  round you choose: *keep going* (another round; if you just mastered a step,
-  the next step on your path) or *done for today*, which gives you homework
-  once for the whole sitting.
+- **Study as long as you like** — there is no question limit. *Finish for
+  today* is always there; when you press it you choose between carrying on
+  and getting homework. Two misses at a level send you back to the lesson
+  cards for another look instead of ending the session. If you just mastered
+  a step, *keep going* moves you to the next one.
 - **Hints** — type `hint` for a nudge toward the method without the answer.
 - **Difficulty ladder** — questions climb from *recall* → *apply* (a small
   calculation) → *transfer* (a situation not in the material). You move up
