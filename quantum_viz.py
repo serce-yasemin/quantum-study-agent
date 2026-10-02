@@ -200,3 +200,85 @@ def matrix_figure(rho: np.ndarray, title: str, show_scale: bool = True) -> go.Fi
         yaxis=dict(autorange="reversed"),
     )
     return fig
+
+
+# ---------- simple pictures for "I didn't get it" ----------
+
+def arrow_figure(theta_deg: float) -> go.Figure:
+    """A qubit with real amplitudes as an arrow of length 1 in a flat plane.
+    Its shadow on each axis is an amplitude (a, b); squaring gives the chances."""
+    a = float(np.cos(np.radians(theta_deg) / 2))
+    b = float(np.sin(np.radians(theta_deg) / 2))
+    arc = np.linspace(0, np.pi / 2, 60)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=np.cos(arc), y=np.sin(arc), mode="lines",
+                             line=dict(color=GRID, width=2, dash="dot"),
+                             hoverinfo="skip"))
+    for x0, y0, x1, y1 in ((a, 0, a, b), (0, b, a, b)):         # the two shadows
+        fig.add_shape(type="line", x0=x0, y0=y0, x1=x1, y1=y1,
+                      line=dict(color=INK, width=1, dash="dash"))
+    fig.add_annotation(x=a, y=b, ax=0, ay=0, xref="x", yref="y", axref="x", ayref="y",
+                       arrowhead=3, arrowsize=1.2, arrowwidth=4, arrowcolor=COLOR_A,
+                       text="")
+    fig.add_annotation(x=a, y=b, text="|ψ⟩  (length 1)", showarrow=False,
+                       xanchor="left", yanchor="bottom", font=dict(color=TEXT, size=14))
+    fig.add_annotation(x=a, y=-0.07, text=f"a = {a:.2f}", showarrow=False,
+                       font=dict(color=COLOR_A, size=14))
+    fig.add_annotation(x=-0.04, y=b, text=f"b = {b:.2f}", showarrow=False,
+                       xanchor="right", font=dict(color=COLOR_B, size=14))
+    axis = dict(range=[-0.22, 1.25], showgrid=False, zeroline=True,
+                zerolinecolor=INK, showticklabels=False, fixedrange=True)
+    fig.update_layout(
+        xaxis=dict(title=dict(text="how much |0⟩"), **axis),
+        yaxis=dict(title=dict(text="how much |1⟩"), scaleanchor="x", **axis),
+        showlegend=False, height=330, margin=dict(l=10, r=10, t=10, b=10),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT))
+    return fig
+
+
+def chance_bar(p0: float) -> go.Figure:
+    """One bar of length 1, split into the chance of 0 and the chance of 1."""
+    fig = go.Figure()
+    for value, name, color in ((p0, "0", COLOR_A), (1 - p0, "1", COLOR_B)):
+        fig.add_trace(go.Bar(
+            x=[value], y=[""], orientation="h", marker=dict(color=color),
+            text=f"chance of {name}: {value:.0%}" if value >= 0.12 else "",
+            textposition="inside", insidetextanchor="middle",
+            textfont=dict(color="#ffffff", size=14),
+            hovertemplate=f"chance of {name}: {value:.1%}<extra></extra>"))
+    fig.update_layout(
+        barmode="stack", showlegend=False, height=90,
+        margin=dict(l=10, r=10, t=5, b=5),
+        xaxis=dict(range=[0, 1], visible=False, fixedrange=True),
+        yaxis=dict(visible=False, fixedrange=True),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    return fig
+
+
+def product_table_figure(theta_deg: float) -> go.Figure:
+    """|ψ⟩⟨ψ| as a multiplication table: column entry times row entry."""
+    a = float(np.cos(np.radians(theta_deg) / 2))
+    b = float(np.sin(np.radians(theta_deg) / 2))
+    v = [a, b]
+    names = ["a", "b"]
+    z = [[v[i] * v[j] for j in range(2)] for i in range(2)]
+    fig = go.Figure(go.Heatmap(
+        z=z, x=[f"a = {a:.2f}", f"b = {b:.2f}"], y=[f"a = {a:.2f}", f"b = {b:.2f}"],
+        zmin=0, zmax=1, colorscale=SEQ_BLUE, xgap=2, ygap=2, showscale=False,
+        hoverinfo="skip"))
+    for i in range(2):
+        for j in range(2):
+            fig.add_annotation(
+                x=j, y=i, showarrow=False,
+                text=f"{names[i]}·{names[j]}<br><b>{z[i][j]:.2f}</b>",
+                font=dict(size=15, color=_cell_ink(z[i][j])))
+    fig.update_layout(
+        height=300, margin=dict(l=10, r=10, t=30, b=10),
+        xaxis=dict(side="top", title=dict(text="row ⟨ψ|"), fixedrange=True),
+        yaxis=dict(autorange="reversed", title=dict(text="column |ψ⟩"),
+                   fixedrange=True),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT))
+    return fig
+

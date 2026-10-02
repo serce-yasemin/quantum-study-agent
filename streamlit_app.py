@@ -420,13 +420,45 @@ def lesson_figure(concept: str) -> None:
             width="stretch")
 
 
+def simple_picture(concept: str, key: str) -> None:
+    """A plain picture of the idea, drawn by our own code - shown when the
+    learner says "I didn't get it". No model output in here."""
+    if concept == "state_vector":
+        theta = st.slider("Turn the arrow", 0, 180, 60, key=f"sp_{key}")
+        st.plotly_chart(qv.arrow_figure(theta), width="stretch", key=f"spa_{key}")
+        st.plotly_chart(qv.chance_bar(float(np.cos(np.radians(theta) / 2) ** 2)),
+                        width="stretch", key=f"spb_{key}")
+        st.caption("The arrow always has length 1. Its two shadows are a and b. "
+                   "Square each shadow → the two chances. They always fill the bar.")
+    elif concept in ("outer_product", "density_matrix"):
+        theta = st.slider("Change the state", 0, 180, 90, key=f"sp_{key}")
+        st.plotly_chart(qv.product_table_figure(theta), width="stretch",
+                        key=f"spa_{key}")
+        st.caption("A multiplication table: every entry of the column times every "
+                   "entry of the row. The diagonal (a·a, b·b) holds the two chances.")
+    elif concept == "mixed_state":
+        p = st.slider("Share of |0⟩ in the mix", 0.0, 1.0, 0.5, 0.05, key=f"sp_{key}")
+        rho_a = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES["|0⟩"]))
+        rho_b = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES["|+⟩"]))
+        st.plotly_chart(qv.bloch_figure([
+            {"rho": rho_a, "label": "A |0⟩", "color": qv.COLOR_A},
+            {"rho": rho_b, "label": "B |+⟩", "color": qv.COLOR_B},
+            {"rho": qv.mix(p, rho_a, rho_b), "label": "mixture",
+             "color": qv.COLOR_MIX}], chord=True), width="stretch", key=f"spa_{key}")
+        st.caption("A mixture sits on the straight line between A and B - inside "
+                   "the ball, not on its surface.")
+
+
 def explain_again(text: str) -> None:
-    """'I didn't get it' - the same card, said more simply."""
+    """'I didn't get it' - show a real picture and say the card more simply."""
     i = ss.card
     if ss.simpler.get(i):
-        st.info(ss.simpler[i])
-    elif st.button("🤔 I didn't get it - explain it differently", key=f"simpler_{i}"):
-        with st.spinner("Finding another way to say it…"):
+        with st.container(border=True):
+            if ss.concept in curriculum.BY_ID and i != 1:   # card 2 has its figure
+                simple_picture(ss.concept, f"{ss.level}_{i}")
+            st.write(ss.simpler[i])
+    elif st.button("🤔 I didn't get it - show me", key=f"simpler_{i}"):
+        with st.spinner("Finding a simpler way…"):
             ss.simpler[i] = call(tutor.explain_differently, concept_title(ss.concept),
                                  ss.objective, text)
         st.rerun()

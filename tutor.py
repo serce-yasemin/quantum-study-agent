@@ -404,27 +404,23 @@ Study material (use it as the source of truth):
 
 
 def explain_differently(concept: str, objective: str, text: str) -> str:
-    """The learner pressed "I didn't get it": say the same thing more simply,
-    with an everyday comparison. Same content, no new facts."""
+    """The learner pressed "I didn't get it". The app shows a real picture
+    (drawn by our code); this adds a few plain words to go with it.
+    Same content as the card, said more simply - no new facts."""
     prompt = f"""A beginner studying "{concept}" did not understand this explanation:
 
 \"\"\"
 {text}
 \"\"\"
 
-The goal of the lesson: {objective}
-
-Explain the SAME thing again, differently:
-- Max 110 words, very short sentences, everyday words.
-- Start with ONE everyday comparison (label it "Picture it:"). Then say in one
-  sentence where the comparison stops being exact (label it "But careful:").
-- Then restate the idea in plain words with the smallest possible numbers.
-- Do not add any new fact, formula or technique.
-
-{CONVENTIONS}
+Say the SAME thing again, more simply:
+- Max 45 words. 3 short sentences at most. Everyday words.
+- Use the smallest possible numbers if you need any.
+- Do NOT write "imagine" or "picture" - a real picture is shown next to
+  your text. Do NOT add any fact, symbol or formula that is not in the
+  explanation above.
 
 Formatting: plain text only. No LaTeX, no HTML, no Markdown. Unicode symbols
-are fine.
+are fine. Write powers as a² (never a^2).
 """
-    return ask(prompt, temperature=0.6)
-
+    return ask(prompt, temperature=0.4)
