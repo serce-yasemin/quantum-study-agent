@@ -32,6 +32,12 @@ re-reading the text.
   button that explains the same thing more simply, with an everyday
   comparison. The model writes the cards; code checks their shape, shuffles
   the answer options, and falls back to a plain lesson if anything is off.
+- **Fast to start** — the goal and the four cards come from one model call,
+  and a lesson that was written once is kept in the profile and opens at
+  once. While you read, the first question is written in the background.
+- **Answering is easy** — a question with parts (a), (b), (c) gets one box per
+  part. No special symbols needed: a plain keyboard (psi, sqrt(2), <phi|psi>)
+  is accepted, and a small ➕ picker adds ψ, φ, √ … for you.
 - **Points** — +1 for finishing a lesson, +1 for a right warm-up, and
   +1 / +2 / +3 for a correct answer at level 1 / 2 / 3.
 - **Study as long as you like** — there is no question limit. *Finish for
@@ -69,6 +75,9 @@ re-reading the text.
   learner profile (every attempt, weak point, review date and homework) is
   saved to your account after every step, so you can continue on any device.
   Forgot your password? The app e-mails you a reset link.
+  The device stays signed in for 7 days, and a lesson or question you were
+  in the middle of is waiting where you stopped - even after the screen went
+  to sleep. *Sign out* forgets the device.
   The model itself is stateless; the agent's memory is this profile. It is
   stored in Supabase with row-level security: each learner can read and write
   only their own row. Without an account set up (e.g. locally), the profile
@@ -94,6 +103,8 @@ re-reading the text.
 - [x] Homework check with a follow-up question and review page; lesson
       cards with figures, warm-up and points
 - [x] Path steps 5 and 6: the Bloch sphere, single-qubit gates X, Z, H
+- [x] Stay signed in, continue where you stopped, display name, answer boxes
+      per question part, symbol picker, faster lesson start
 - [ ] Week 5 — a week of real daily use; demo built from real progress data
 
 ## Tech stack

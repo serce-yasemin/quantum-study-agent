@@ -126,6 +126,13 @@ Key points: {question["key_points"]}
 
 Student answer: \"\"\"{answer}\"\"\"
 
+The student types on a plain keyboard. Treat these spellings as the symbols
+they stand for and never mark an answer down for them: psi, phi, theta, rho,
+pi; sqrt(2) or 1/sqrt2; |0> and <phi|psi> for kets and bras; ^2 for a square;
+* for multiplication; conj or * after a number for a complex conjugate.
+If the question has parts (a), (b), (c), the answer is given part by part;
+every part the question asks for must be right.
+
 Return JSON with these keys:
 - "correct": true or false
 - "feedback": 2-3 sentences to the student - what was right, what was missing
@@ -275,6 +282,11 @@ Return JSON only:
   someone who did the homework can answer in 1-3 lines. They must be answerable
   from the study material below plus the homework - no new techniques.
 
+Stay inside the study material: the task and the check questions may only use
+ideas that appear in it. Do not bring in later topics (for example, do not
+mention density matrices or ρ₀₁ unless the material itself covers them), and
+apply a convention below only if the material covers that idea.
+
 {CONVENTIONS}
 
 Formatting: plain text only. No LaTeX, no Markdown. Use Unicode symbols
@@ -335,8 +347,18 @@ Study material:
             "expected_answer": str(raw.get("expected_answer") or "").strip()}
 
 
+def lesson_plan(material: str, concept: str, difficulty: int) -> dict | None:
+    """Objective + lesson cards in ONE model call (starting a lesson used to
+    take two calls, one after the other). Returns {"objective", "cards"} or
+    None if the reply does not have the right shape."""
+    cards = lesson_cards(material, concept, difficulty, None)
+    if not cards or not cards.get("objective"):
+        return None
+    return {"objective": cards.pop("objective"), "cards": cards}
+
+
 def lesson_cards(material: str, concept: str, difficulty: int,
-                 objective: str) -> dict | None:
+                 objective: str | None) -> dict | None:
     """A lesson in four small cards instead of one block of text.
 
     1. bridge   - start from something the learner already knows
@@ -349,13 +371,24 @@ def lesson_cards(material: str, concept: str, difficulty: int,
     if the reply does not have the right shape - the caller then falls back
     to the plain one-card lesson.
     """
+    if objective:
+        goal = f"Teach exactly this objective and nothing beyond it: {objective}"
+        goal_key = ""
+    else:           # one call instead of two: the model also writes the objective
+        goal = (f"Difficulty level {difficulty}/3 - {DIFFICULTY_RULES[difficulty]}\n"
+                "First choose ONE learning objective for this level, then teach "
+                "exactly that objective and nothing beyond it.")
+        goal_key = ('- "objective": ONE sentence starting with "The learner can ...". '
+                    "It may only use ideas that appear in the study material (plus "
+                    "basic linear algebra) and must be teachable with one tiny "
+                    "example.\n")
     prompt = f"""Teach a beginner the concept "{concept}" in four small cards.
-Teach exactly this objective and nothing beyond it: {objective}
+{goal}
 Assume they have NOT read the study material and know only basic linear algebra
 (vectors, matrices, complex numbers).
 
 Return JSON with these keys:
-- "bridge": at most 2 short sentences (max 30 words). Start from something they already know and
+{goal_key}- "bridge": at most 2 short sentences (max 30 words). Start from something they already know and
   say what is about to be new. No formulas beyond one tiny one.
 - "idea": the ONE new idea, max 45 words, short sentences. The figure next
   to it does the showing - do not describe what a picture could show. Draw any vector or
@@ -395,6 +428,9 @@ Study material (use it as the source of truth):
             return None
     except (KeyError, TypeError, ValueError, AttributeError):
         return None
+    if not objective:
+        cards["objective"] = str(raw.get("objective") or "").strip().splitlines()[0:1]
+        cards["objective"] = cards["objective"][0] if cards["objective"] else ""
     right = options[correct]
     random.shuffle(options)
     cards["try_it"] = {"question": str(t["question"]).strip(), "options": options,

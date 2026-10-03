@@ -10,14 +10,18 @@ Three tabs:
 - Study: the AI tutor loop (lesson -> questions -> grading -> review pages),
   backed by NVIDIA Nemotron on Nebius Token Factory. A learning path starts
   from the basics (state vectors) and unlocks each step after the one before.
-- My progress: the learner profile - download it, upload it next time.
+- My progress: the learner profile (saved to the learner's account).
 
-The learner profile lives in this browser session and can be downloaded as
-JSON - your learning data stays under your control.
+Signed-in learners stay signed in on their device and continue where they
+stopped; without an account set up, the profile lives in the browser session
+and can be downloaded as JSON.
 """
 
+import hashlib
 import json
 import os
+import re
+import threading
 from datetime import date
 
 import numpy as np
@@ -45,25 +49,85 @@ MAX_WRONG_PER_LEVEL = 2   # after this many misses at a level: back to the lesso
 NEED = profile_store.CORRECT_IN_A_ROW_TO_PASS
 
 
+ss = st.session_state
+
+
+# ---------------------------------------------------------------- cookies
+# "Stay signed in on this device": when the screen sleeps, the browser drops
+# its connection and Streamlit starts a brand-new session with empty memory.
+# Two small cookies let the new session skip the access code and sign in again.
+GATE_COOKIE, SESSION_COOKIE = "qsa_gate", "qsa_session"
+REMEMBER_DAYS = 7
+
+
+def cookie(name: str) -> str | None:
+    """A cookie the browser sent when this session started."""
+    try:
+        return st.context.cookies.get(name)
+    except Exception:
+        return None
+
+
+def want_cookie(name: str, value: str) -> None:
+    """Ask for a cookie to be set ("" = delete it). Written by sync_cookies()."""
+    ss.setdefault("cookies", {})[name] = value
+
+
+def sync_cookies() -> None:
+    """Write the wanted cookies in the browser. Python cannot set a cookie
+    itself, so a tiny script does it. Values are checked first, so nothing
+    unexpected can end up inside the script."""
+    wanted = ss.get("cookies")
+    if not wanted:
+        return
+    lines = []
+    for name, value in sorted(wanted.items()):
+        if not re.fullmatch(r"[A-Za-z0-9_.\-]*", value):
+            continue
+        age = REMEMBER_DAYS * 86400 if value else 0
+        lines.append(f'DOC.cookie = "{name}={value}; path=/; max-age={age}; '
+                     'SameSite=Lax; Secure";')
+    try:
+        st.html("<script>const DOC = document; " + " ".join(lines) + "</script>",
+                unsafe_allow_javascript=True)
+    except TypeError:                      # older Streamlit: use a hidden frame
+        import streamlit.components.v1 as components
+        components.html("<script>const DOC = window.parent.document; "
+                        + " ".join(lines) + "</script>", height=0)
+
+
+def stop() -> None:
+    sync_cookies()
+    st.stop()
+
+
 # ---------------------------------------------------------------- access gate
+def gate_hash() -> str:
+    """What the gate cookie holds: a fingerprint of the code, never the code."""
+    return hashlib.sha256(f"qsa-gate:{ACCESS_CODE}".encode()).hexdigest()
+
+
 def access_gate() -> None:
     """Protect the shared API credits on the public demo."""
-    if not ACCESS_CODE or st.session_state.get("unlocked"):
+    if not ACCESS_CODE or ss.get("unlocked"):
+        return
+    if cookie(GATE_COOKIE) == gate_hash():      # this device entered it before
+        ss.unlocked = True
         return
     st.title("⚛️ Quantum Study Agent")
     code = st.text_input("Access code", type="password",
                          help="The code is in the hackathon submission text.")
     if code:
         if code == ACCESS_CODE:
-            st.session_state.unlocked = True
+            ss.unlocked = True
+            want_cookie(GATE_COOKIE, gate_hash())
             st.rerun()
         st.error("Wrong code.")
-    st.stop()
+    stop()
 
 
 access_gate()
 
-ss = st.session_state
 EMPTY_PROFILE = {"learner": {"goal": "", "interests": []}, "concepts": {}, "assignments": []}
 
 
@@ -77,6 +141,47 @@ def finish_login(client, user) -> None:
     ss.db, ss.user_id, ss.user_email = client, user.id, user.email
     ss.profile, ss.saved = profile, store.fingerprint(profile)
     ss.stage = "start"
+    load_resume()
+
+
+# What a lesson or question in progress consists of. Saved inside the profile
+# after every step, so a learner who was interrupted lands where they stopped.
+RESUME_KEYS = ["concept", "material", "level", "stage", "objective", "cards",
+               "lesson", "card", "simpler", "try_pick", "wrong_this_level",
+               "asked", "question", "show_hint", "result", "passed",
+               "last_answer", "review", "session_weak", "was_mastered"]
+RESUME_STAGES = ("lesson", "question", "feedback")
+
+
+def save_resume() -> None:
+    profile = ss.get("profile")
+    if profile is None:
+        return
+    if ss.get("stage") in RESUME_STAGES and ss.get("concept"):
+        snap = {key: ss.get(key) for key in RESUME_KEYS}
+        if ss.concept in curriculum.BY_ID:
+            snap["material"] = None          # built-in primer: no need to store it
+        profile["resume"] = snap
+    else:
+        profile.pop("resume", None)
+
+
+def load_resume() -> None:
+    snap = ss.profile.get("resume")
+    if not snap or snap.get("stage") not in RESUME_STAGES:
+        return
+    try:
+        for key in RESUME_KEYS:
+            ss[key] = snap.get(key)
+        if ss.material is None:
+            ss.material = curriculum.material(ss.concept)
+        # JSON turns the card numbers into text; turn them back.
+        ss.simpler = {int(k): v for k, v in (snap.get("simpler") or {}).items()}
+        ss.homework = None
+        ss.resumed = True
+    except Exception:                         # a damaged snapshot must never
+        ss.profile.pop("resume", None)        # lock the learner out
+        ss.stage = "start"
 
 
 def read_email_link() -> None:
@@ -117,10 +222,10 @@ def new_password_form() -> None:
                     finish_login(ss.reset_client, user)
                 except Exception as exc:
                     st.error(str(exc))
-                    st.stop()
+                    stop()
                 del ss.reset_client, ss.reset_user
                 st.rerun()
-    st.stop()
+    stop()
 
 
 def account_gate() -> None:
@@ -132,6 +237,16 @@ def account_gate() -> None:
         return
     if ss.get("reset_user"):
         new_password_form()
+    if not ss.get("cookie_tried"):           # once per session: stay signed in
+        ss.cookie_tried = True
+        token = cookie(SESSION_COOKIE)
+        if token:
+            try:
+                client = store.new_client()
+                finish_login(client, store.restore(client, token))
+                return
+            except Exception:
+                want_cookie(SESSION_COOKIE, "")      # no longer valid: forget it
     st.title("⚛️ Quantum Study Agent")
     st.write("Sign in to keep your progress - it is saved to your account, so you "
              "can continue on any device.")
@@ -153,7 +268,7 @@ def account_gate() -> None:
                     finish_login(client, user)
                 except Exception as exc:
                     st.error(str(exc))
-                    st.stop()
+                    stop()
                 st.rerun()
     with forgot_tab, st.form("forgot"):
         st.write("We will e-mail you a link to choose a new password.")
@@ -163,12 +278,16 @@ def account_gate() -> None:
                 store.send_password_reset(store.new_client(), email.strip())
             except Exception as exc:
                 st.error(str(exc))
-                st.stop()
+                stop()
             # Same message whether or not the address has an account,
             # so the form cannot be used to find out who is signed up.
             st.success("If an account exists for this address, a reset link is "
                        "on its way.")
-    st.stop()
+    stop()
+
+
+def concept_title(concept: str) -> str:
+    return curriculum.BY_ID[concept]["title"] if concept in curriculum.BY_ID else concept
 
 
 def autosave() -> None:
@@ -187,6 +306,22 @@ def autosave() -> None:
 
 account_gate()
 
+if ss.get("user_id"):
+    # Keep the session alive and remember its current token on this device.
+    try:
+        token, checked = store.refresh_token(ss.db), True
+    except Exception:                 # network hiccup: keep going, check next time
+        token, checked = None, False
+    if checked and token is None:     # session ended (e.g. signed out elsewhere)
+        for key in list(ss.keys()):
+            if key not in ("unlocked", "cookies"):
+                del ss[key]
+        want_cookie(SESSION_COOKIE, "")
+        ss.cookie_tried = True
+        st.rerun()
+    if checked:
+        want_cookie(SESSION_COOKIE, token)
+
 # Match the figures to the viewer's light/dark theme.
 try:
     qv.set_theme(st.context.theme.type == "dark")
@@ -194,6 +329,7 @@ except Exception:
     qv.set_theme(False)
 ss.setdefault("profile", json.loads(json.dumps(EMPTY_PROFILE)))
 ss.setdefault("stage", "start")
+save_resume()
 autosave()   # catches changes from a run that ended early with st.rerun()
 
 
@@ -202,16 +338,32 @@ st.title("⚛️ Quantum Study Agent")
 st.caption("A personal, stateful study agent for quantum computing · "
            "NVIDIA Nemotron on Nebius Token Factory")
 if ss.get("user_id"):
+    learner = ss.profile.setdefault("learner", {})
     left, right = st.columns([4, 1])
-    left.caption(f"Signed in as {ss.user_email} · progress is saved automatically"
-                 f" · ⭐ {ss.profile.get('points', 0)} points")
+    hello = f"👋 Hi, **{learner['name']}** · " if learner.get("name") else ""
+    left.markdown(f"{hello}⭐ **{ss.profile.get('points', 0)}** points · "
+                  ":gray[progress is saved automatically]")
     if right.button("Sign out"):
+        save_resume()
         autosave()
         store.sign_out(ss.db)
         for key in list(ss.keys()):
-            if key != "unlocked":
+            if key not in ("unlocked", "cookies"):
                 del ss[key]
+        want_cookie(SESSION_COOKIE, "")
+        ss.cookie_tried = True
         st.rerun()
+    if not learner.get("name"):
+        with st.form("name_form", border=False):
+            box, save = st.columns([3, 1], vertical_alignment="bottom")
+            name = box.text_input("What should we call you?", max_chars=30,
+                                  placeholder="Your first name or a nickname")
+            if save.form_submit_button("Save") and name.strip():
+                learner["name"] = name.strip()
+                st.rerun()
+    if ss.pop("resumed", False):
+        st.info(f"▶️ Welcome back - **{concept_title(ss.concept)}** is waiting where "
+                "you stopped. Open the 📘 **Study** tab to continue.")
 
 tab_explore, tab_study, tab_profile = st.tabs(["🔭 Explore", "📘 Study", "🗂️ My progress"])
 
@@ -310,10 +462,6 @@ def path_overview() -> None:
             st.caption(f"{ICONS[state]} {LABELS[state]} · level {level}/3")
 
 
-def concept_title(concept: str) -> str:
-    return curriculum.BY_ID[concept]["title"] if concept in curriculum.BY_ID else concept
-
-
 def show_assignment(a: dict) -> None:
     """One homework card: what to do, the book section, the checked links."""
     with st.container(border=True):
@@ -332,10 +480,10 @@ def show_assignment(a: dict) -> None:
                    "check questions about it.")
 
 
-def call(fn, *args):
+def call(fn, *args, label: str = "Nemotron is thinking…"):
     """Run an LLM step with a spinner; show a friendly error instead of a trace."""
     try:
-        with st.spinner("Nemotron is thinking…"):
+        with st.spinner(label):
             return fn(*args)
     except Exception as exc:
         st.error(f"The model call failed: {exc}")
@@ -357,17 +505,68 @@ def begin_session(concept: str, material: str, keep_gaps: bool = False) -> None:
     start_level()
 
 
-def start_level() -> None:
+def start_level(fresh: bool = False) -> None:
+    """Open the lesson for the current level.
+
+    Speed: the objective and the four cards come from ONE model call, and a
+    lesson that was written before is kept in the profile and opens at once.
+    fresh=True (after two misses) asks for a newly written lesson instead.
+    """
     material = ss.material
-    ss.objective = call(tutor.learning_objective, material, ss.concept, ss.level)
-    ss.cards = call(tutor.lesson_cards, material, ss.concept, ss.level, ss.objective)
-    # If the model's cards do not have the right shape, teach the old way:
-    # one plain lesson text. The learner always gets a lesson.
-    ss.lesson = (None if ss.cards else
-                 call(tutor.micro_lesson, material, ss.concept, ss.level, ss.objective))
+    saved = ss.profile.setdefault("lessons", {})
+    key = (f"{ss.concept}:{ss.level}:"
+           f"{hashlib.sha256(material.encode()).hexdigest()[:8]}")
+    plan = None if fresh else saved.get(key)
+    if plan is None:
+        plan = call(tutor.lesson_plan, material, ss.concept, ss.level,
+                    label="Writing your lesson - this can take up to a minute…")
+        if plan and ss.concept in curriculum.BY_ID:
+            saved[key] = plan
+    if plan:
+        ss.objective, ss.cards, ss.lesson = plan["objective"], plan["cards"], None
+    else:
+        # The cards did not have the right shape: teach the old way, with one
+        # plain lesson text. The learner always gets a lesson.
+        ss.objective = call(tutor.learning_objective, material, ss.concept, ss.level)
+        ss.cards = None
+        ss.lesson = call(tutor.micro_lesson, material, ss.concept, ss.level,
+                         ss.objective)
     ss.card, ss.simpler, ss.try_pick = 0, {}, None
     ss.wrong_this_level = 0
     ss.stage = "lesson"
+    prefetch_question()        # written in the background while the lesson is read
+
+
+def weak_points() -> list[str]:
+    c = concept_record()
+    weak = [h["weak_point"] for h in c["history"] if h["weak_point"]]
+    return weak + [g for a in ss.profile.get("assignments", [])
+                   if a["concept"] == ss.concept
+                   for chk in a.get("checks", []) for g in chk["gaps"] if g]
+
+
+def question_slot() -> tuple:
+    """Which question a prefetched one is meant for."""
+    return (ss.concept, ss.level, len(ss.asked))
+
+
+def prefetch_question() -> None:
+    """Start writing the next question in a background thread, so it is ready
+    (or nearly ready) when the learner asks for it. The thread only talks to
+    the model - it never touches the page."""
+    args = (ss.material, ss.concept, ss.level, weak_points(), list(ss.asked),
+            ss.objective)
+    box: dict = {}
+
+    def work() -> None:
+        try:
+            box["question"] = tutor.generate_question(*args)
+        except Exception as exc:               # fall back to a normal call later
+            box["error"] = exc
+
+    thread = threading.Thread(target=work, daemon=True)
+    thread.start()
+    ss.prefetch = {"thread": thread, "box": box, "slot": question_slot()}
 
 
 def add_points(n: int, why: str) -> None:
@@ -384,10 +583,17 @@ def lesson_figure(concept: str) -> None:
     """A small interactive picture for the concept, drawn by our own code
     (exact numbers - nothing here comes from the model)."""
     if concept == "state_vector":
-        st.caption("Move the sliders: θ changes the probabilities, φ only turns "
-                   "the arrow around the vertical axis.")
-        theta = st.slider("θ (tilt from |0⟩, degrees)", 0, 180, 60, key="lf_th")
-        phi = st.slider("φ (relative phase, degrees)", 0, 359, 0, key="lf_ph")
+        st.caption("The arrow is the qubit. Try both sliders and watch the "
+                   "numbers below.")
+        theta = st.slider("θ - tilt the arrow away from |0⟩ (degrees)", 0, 180, 60,
+                          key="lf_th",
+                          help="More tilt = more chance of measuring 1. "
+                               "0° is |0⟩, 180° is |1⟩, 90° is half and half.")
+        phi = st.slider("φ - turn the arrow around (degrees)", 0, 359, 0, key="lf_ph",
+                        help="This angle is called the relative phase. It does "
+                             "not change P(0) or P(1) - you meet it later.")
+        st.caption("θ changes the two chances P(0) and P(1). φ only turns the arrow "
+                   "around the vertical line: the chances stay the same.")
         rho = qv.density_from_state(qv.pure_state(theta, phi))
         a, b = np.cos(np.radians(theta) / 2), np.sin(np.radians(theta) / 2)
         st.code(f"|ψ⟩ = {a:.3f}|0⟩ + {b:.3f}·e^(i·{phi}°)|1⟩\n"
@@ -534,7 +740,7 @@ def lesson_cards_view() -> None:
         st.markdown(f"#### ✏️ {CARD_NAMES[2]}")
         for n, step in enumerate(cards["example"], 1):
             st.code(f"{n}. {step['step']}", language=None, wrap_lines=True)
-            st.caption(f"↳ why: {step['why']}")
+            st.markdown(f":orange-badge[💡 Why?] {step['why']}")
         explain_again("\n".join(f"{x['step']} ({x['why']})" for x in cards["example"]))
     else:
         t = cards["try_it"]
@@ -573,13 +779,52 @@ def lesson_cards_view() -> None:
             st.rerun()
 
 
+PART = re.compile(r"\(([a-e])\)\s+")
+SYMBOLS = ["ψ", "φ", "θ", "ρ", "⟨", "⟩", "|", "√", "²", "π", "†", "·"]
+KEYBOARD_NOTE = ("No need for special symbols: a plain keyboard is fine - psi, phi, "
+                 "sqrt(2), |0>, <phi|psi>, ^2. Or add one with ➕.")
+
+
+def split_parts(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """Split "... (a) ... (b) ... (c) ..." into the intro and its parts, so each
+    part gets its own answer box. Anything else comes back as one piece."""
+    marks = list(PART.finditer(text))
+    letters = [m.group(1) for m in marks]
+    if len(marks) < 2 or letters != list("abcde")[:len(marks)]:
+        return text.strip(), []
+    ends = [m.start() for m in marks[1:]] + [len(text)]
+    parts = [(m.group(1), text[m.end():end].strip()) for m, end in zip(marks, ends)]
+    return text[:marks[0].start()].strip(), parts
+
+
+def add_symbol(key: str, symbol: str) -> None:
+    ss[key] = (ss.get(key) or "") + symbol
+
+
+def answer_box(label: str, key: str, height: int = 110) -> str:
+    """An answer box with a small symbol picker. A picked symbol is added at
+    the END of the text (the page cannot know where the cursor is)."""
+    text = st.text_area(label, key=key, height=height)
+    with st.popover("➕ symbol"):
+        st.caption("Adds the symbol at the end of your answer.")
+        cols = st.columns(6)
+        for i, symbol in enumerate(SYMBOLS):
+            cols[i % 6].button(symbol, key=f"{key}_sym{i}", on_click=add_symbol,
+                               args=(key, symbol))
+    return text
+
+
 def next_question() -> None:
-    c = concept_record()
-    weak = [h["weak_point"] for h in c["history"] if h["weak_point"]]
-    weak += [g for a in ss.profile.get("assignments", []) if a["concept"] == ss.concept
-             for chk in a.get("checks", []) for g in chk["gaps"] if g]
-    ss.question = call(tutor.generate_question, ss.material, ss.concept, ss.level,
-                       weak, ss.asked, ss.objective)
+    question, pre = None, ss.pop("prefetch", None)
+    if pre and pre["slot"] == question_slot():
+        with st.spinner("Writing your question…"):
+            pre["thread"].join(timeout=180)
+        question = pre["box"].get("question")
+    if question is None:
+        question = call(tutor.generate_question, ss.material, ss.concept, ss.level,
+                        weak_points(), ss.asked, ss.objective,
+                        label="Writing your question…")
+    ss.question = question
     ss.asked.append(ss.question["question"])
     ss.show_hint = False
     ss.stage = "question"
@@ -626,8 +871,9 @@ def check_homework() -> None:
     check = ss.get("check_results")
     if check is None:
         st.write("Answer in a line or two - no need to be formal.")
-        answers = [st.text_area(q["question"], key=f"hw_{a['id']}_{i}", height=100)
+        answers = [answer_box(q["question"], f"hw_{a['id']}_{i}", height=100)
                    for i, q in enumerate(a["check_questions"])]
+        st.caption(KEYBOARD_NOTE)
         if st.button("Check my answers", type="primary",
                      disabled=not all(x.strip() for x in answers)):
             with st.spinner("Checking your answers…"):
@@ -669,7 +915,7 @@ def check_homework() -> None:
     elif extra and extra_done is None:           # one wrong: one more question
         st.info("One miss. One more question on that idea - get it right and the "
                 "homework counts as done.")
-        answer = st.text_area(extra["question"], key=f"hw_{a['id']}_extra", height=100)
+        answer = answer_box(extra["question"], f"hw_{a['id']}_extra", height=100)
         if st.button("Check this answer", type="primary", disabled=not answer.strip()):
             with st.spinner("Checking…"):
                 ss.check_extra = call(homework.check_extra, a, extra, answer.strip())
@@ -741,6 +987,9 @@ with tab_study:
             st.success(f"**Goal:** {ss.objective}")
             if ss.cards:
                 lesson_cards_view()
+                if st.button("Leave this lesson", key="leave_lesson"):
+                    ss.stage = "start"
+                    st.rerun()
             else:
                 st.code(ss.lesson, language=None, wrap_lines=True)
                 st.caption("Tip: open the 🔭 Explore tab to see any matrix from this "
@@ -751,14 +1000,27 @@ with tab_study:
 
         elif ss.stage == "question":
             st.subheader("Question")
-            st.markdown(ss.question["question"])
+            intro, parts = split_parts(ss.question["question"])
+            st.markdown(intro)
             if st.button("💡 Hint"):
                 ss.show_hint = True
             if ss.show_hint:
                 st.info(ss.question.get("hint") or "Look back at the lesson example.")
-            answer = st.text_area("Your answer (plain text is fine, e.g. [[0.5, 0.5], [0.5, 0.5]])",
-                                  height=140, key=f"ans_{len(ss.asked)}")
-            if st.button("Submit answer", type="primary", disabled=not answer.strip()):
+            n = len(ss.asked)
+            if parts:                   # one box per part: (a), (b), (c) ...
+                given = []
+                for letter, text in parts:
+                    st.markdown(f"**({letter})** {text}")
+                    given.append(answer_box(f"Your answer to ({letter})",
+                                            f"ans_{n}_{letter}", height=90))
+                answer = "\n".join(f"({letter}) {text.strip() or '(no answer)'}"
+                                   for (letter, _), text in zip(parts, given))
+                ready = any(text.strip() for text in given)
+            else:
+                answer = answer_box("Your answer", f"ans_{n}", height=140)
+                ready = bool(answer.strip())
+            st.caption(KEYBOARD_NOTE)
+            if st.button("Submit answer", type="primary", disabled=not ready):
                 result = call(tutor.grade_answer, ss.question, answer)
                 passed = profile_store.record_attempt(c, ss.level, result["correct"],
                                                       result.get("weak_point"))
@@ -783,7 +1045,7 @@ with tab_study:
         elif ss.stage == "feedback":
             st.subheader("Question")
             st.markdown(ss.question["question"])
-            st.markdown(f"**Your answer:** {ss.last_answer}")
+            st.markdown("**Your answer:**  \n" + ss.last_answer.replace("\n", "  \n"))
             if ss.result["correct"]:
                 st.success(f"✅ Correct - {ss.result['feedback']}")
             else:
@@ -807,6 +1069,8 @@ with tab_study:
                 label, action = "Next level →", "level"
             else:
                 label, action = "Next question →", "question"
+                if (ss.get("prefetch") or {}).get("slot") != question_slot():
+                    prefetch_question()      # ready by the time feedback is read
 
             go, stop = st.columns([2, 1])
             if action != "mastered" and stop.button("Finish for today", width="stretch"):
@@ -816,7 +1080,7 @@ with tab_study:
                 st.rerun()
             if go.button(label, type="primary", width="stretch"):
                 if action == "relearn":
-                    start_level()
+                    start_level(fresh=True)
                 elif action == "mastered":
                     ss.stage = "done"
                     title = curriculum.BY_ID.get(ss.concept, {}).get("title", ss.concept)
@@ -868,7 +1132,9 @@ with tab_study:
                 st.subheader("📚 Your homework")
                 show_assignment(ss.homework)
             if ss.get("homework") is not None:
-                st.write("Your progress is in the 🗂️ **My progress** tab - download "
+                st.write("Your homework is saved. Next time, the Study tab starts "
+                         "with **I did it - check me**." if ss.get("user_id") else
+                         "Your progress is in the 🗂️ **My progress** tab - download "
                          "it to keep it.")
                 if st.button("Start a new session"):
                     ss.stage = "start"
@@ -878,6 +1144,14 @@ with tab_study:
 # ================================================================ PROFILE
 with tab_profile:
     st.subheader("Your learner profile")
+    if ss.get("user_id"):
+        me = ss.profile.setdefault("learner", {})
+        new_name = st.text_input("Your name in the app", me.get("name", ""),
+                                 max_chars=30).strip()
+        if new_name != me.get("name", ""):
+            me["name"] = new_name
+            st.rerun()
+        st.caption(f"Account: {ss.user_email}")
     st.metric("⭐ Points", ss.profile.get("points", 0),
               help="+1 for finishing a lesson, +1 for a right warm-up, "
                    "+1 / +2 / +3 for a correct answer at level 1 / 2 / 3.")
@@ -925,4 +1199,6 @@ with tab_profile:
         st.success("Profile loaded.")
 
 
+save_resume()
 autosave()
+sync_cookies()

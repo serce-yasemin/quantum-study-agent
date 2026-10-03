@@ -23,8 +23,12 @@ def configured() -> bool:
 
 
 def new_client():
-    from supabase import create_client  # imported lazily: optional dependency
-    return create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
+    from supabase import ClientOptions, create_client  # lazy: optional dependency
+    # No background token refresh: the app refreshes the session itself (see
+    # refresh_token below), so it always knows the current refresh token and
+    # can keep the browser's "stay signed in" cookie in step with it.
+    return create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"],
+                         options=ClientOptions(auto_refresh_token=False))
 
 
 def sign_up(client, email: str, password: str):
@@ -50,6 +54,31 @@ def sign_out(client) -> None:
         client.auth.sign_out()
     except Exception:
         pass
+
+
+def refresh_token(client) -> str | None:
+    """The session's current refresh token, or None if the session has ended.
+    A network problem raises instead, so a hiccup is not mistaken for a sign-out.
+
+    get_session() renews an expired session first (access tokens last about
+    an hour). Each refresh token works once: renewing hands back a new one,
+    so the caller must store whatever this returns.
+    """
+    from supabase_auth.errors import AuthError
+    try:
+        session = client.auth.get_session()
+    except AuthError:          # the session was ended or the token was refused
+        return None
+    return session.refresh_token if session else None
+
+
+def restore(client, token: str):
+    """Sign in again from a stored refresh token ("stay signed in on this
+    device"). Returns the user; raises if the token is no longer valid."""
+    res = client.auth.refresh_session(token)
+    if res.user is None:
+        raise RuntimeError("Session expired.")
+    return res.user
 
 
 def send_password_reset(client, email: str) -> None:
