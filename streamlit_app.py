@@ -650,6 +650,15 @@ def start_level(fresh: bool = False) -> None:
     ss.wrong_this_level = 0
     ss.stage = "lesson"
     prefetch_question()        # written in the background while the lesson is read
+    # The lesson after this one is written now as well, so "Next level" has
+    # nothing left to wait for: the next level, or after the last level the
+    # next step on the path.
+    if ss.level < profile_store.MAX_LEVEL:
+        prefetch_lesson(ss.concept, ss.level + 1)
+    else:
+        ids = [s["id"] for s in curriculum.PATH]
+        if ss.concept in ids[:-1]:
+            prefetch_lesson(ids[ids.index(ss.concept) + 1], 1)
 
 
 def weak_points() -> list[str]:
