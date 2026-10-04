@@ -32,9 +32,12 @@ re-reading the text.
   button that explains the same thing more simply, with an everyday
   comparison. The model writes the cards; code checks their shape, shuffles
   the answer options, and falls back to a plain lesson if anything is off.
-- **Fast to start** — the goal and the four cards come from one model call,
-  and a lesson that was written once is kept in the profile and opens at
-  once. While you read, the first question is written in the background.
+- **Fast to start** — the goal, the four cards and an easier wording of each
+  card ("I didn't get it") come from one model call. A lesson you have seen
+  is kept and opens at once. The lesson you will probably open next (the
+  recommended step, the next level) and the first question are written in the
+  background while you read. Optional: set `NEMOTRON_REASONING` to `low` or
+  `off` to make the model think less before it answers.
 - **Answering is easy** — a question with parts (a), (b), (c) gets one box per
   part. No special symbols needed: a plain keyboard (psi, sqrt(2), <phi|psi>)
   is accepted, and a small ➕ picker adds ψ, φ, √ … for you.

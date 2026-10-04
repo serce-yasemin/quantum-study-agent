@@ -11,7 +11,7 @@ import os
 import re
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 
 load_dotenv()
 
@@ -35,13 +35,32 @@ def _get_client() -> OpenAI:
     return _client
 
 
+# How much the model "thinks" before it answers. Thinking costs time.
+# Set NEMOTRON_REASONING to "low" or "off" to trade some care for speed;
+# leave it unset for the model's default. (NVIDIA documents these switches
+# for Nemotron 3 Super as chat_template_kwargs.)
+REASONING = {"off": {"enable_thinking": False},
+             "low": {"enable_thinking": True, "low_effort": True}}
+_reasoning_refused = False
+
+
+def _complete(prompt: str, temperature: float):
+    global _reasoning_refused
+    request = dict(model=MODEL, messages=[{"role": "user", "content": prompt}],
+                   temperature=temperature)
+    mode = REASONING.get(os.environ.get("NEMOTRON_REASONING", "").strip().lower())
+    if mode and not _reasoning_refused:
+        try:
+            return _get_client().chat.completions.create(
+                **request, extra_body={"chat_template_kwargs": mode})
+        except BadRequestError:
+            _reasoning_refused = True    # the provider does not take the switch
+    return _get_client().chat.completions.create(**request)
+
+
 def ask(prompt: str, temperature: float = 0.4) -> str:
     """Send one prompt, return the model's text reply."""
-    response = _get_client().chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-    )
+    response = _complete(prompt, temperature)
     text = response.choices[0].message.content or ""
     # Some reasoning models wrap their thinking in <think> tags; drop it.
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)

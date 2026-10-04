@@ -566,17 +566,66 @@ def begin_session(concept: str, material: str, keep_gaps: bool = False) -> None:
     start_level()
 
 
+def lesson_key(concept: str, level: int, material: str) -> str:
+    return f"{concept}:{level}:v4:{hashlib.sha256(material.encode()).hexdigest()[:8]}"
+
+
+def prefetch_lesson(concept: str, level: int) -> None:
+    """Write a lesson the learner will probably open next (the recommended
+    step, or the next level) in a background thread, so the click itself has
+    nothing left to wait for. One at a time; never for a lesson already saved."""
+    if concept not in curriculum.BY_ID or not 1 <= level <= profile_store.MAX_LEVEL:
+        return
+    material = curriculum.material(concept)
+    key = lesson_key(concept, level, material)
+    running = ss.get("lesson_prefetch")
+    if key in ss.profile.get("lessons", {}) or (running and running["key"] == key):
+        return
+    if running and running["thread"].is_alive():
+        return
+    box: dict = {}
+    options = figures.options(concept)
+
+    def work() -> None:
+        try:
+            box["plan"] = tutor.lesson_plan(material, concept, level, options)
+        except Exception as exc:               # the click falls back to a normal call
+            box["error"] = exc
+
+    thread = threading.Thread(target=work, daemon=True)
+    thread.start()
+    ss.lesson_prefetch = {"thread": thread, "box": box, "key": key}
+
+
+def collect_lesson(key: str | None = None) -> None:
+    """Move a finished background lesson into the profile. With a key, wait
+    for that lesson if it is the one being written."""
+    running = ss.get("lesson_prefetch")
+    if not running:
+        return
+    if running["thread"].is_alive():
+        if running["key"] != key:
+            return
+        with st.spinner("Finishing your lesson…"):
+            running["thread"].join()
+    if running["box"].get("plan"):
+        ss.profile.setdefault("lessons", {})[running["key"]] = running["box"]["plan"]
+    ss.lesson_prefetch = None
+
+
 def start_level(fresh: bool = False) -> None:
     """Open the lesson for the current level.
 
-    Speed: the objective and the four cards come from ONE model call, and a
-    lesson that was written before is kept in the profile and opens at once.
+    Speed: the objective and the four cards come from ONE model call, a lesson
+    that was written before is kept in the profile and opens at once, and the
+    likely next lesson is written in the background before it is asked for.
     fresh=True (after two misses) asks for a newly written lesson instead.
     """
     material = ss.material
     saved = ss.profile.setdefault("lessons", {})
-    key = (f"{ss.concept}:{ss.level}:v3:"
-           f"{hashlib.sha256(material.encode()).hexdigest()[:8]}")
+    key = lesson_key(ss.concept, ss.level, material)
+    if not fresh:
+        collect_lesson(key)
     plan = None if fresh else saved.get(key)
     if plan is None:
         plan = call(tutor.lesson_plan, material, ss.concept, ss.level,
@@ -656,9 +705,14 @@ def explain_again(text: str) -> None:
                              ss.get("figure_numbers"))
             st.write(ss.simpler[i])
     elif st.button("🤔 I didn't get it - show me", key=f"simpler_{i}"):
-        with st.spinner("Finding a simpler way…"):
-            ss.simpler[i] = call(tutor.explain_differently, concept_title(ss.concept),
-                                 ss.objective, text)
+        # Usually already written with the lesson, so this opens at once.
+        ready = (ss.cards or {}).get("simpler", {}).get(("bridge", "idea", "example")[i])
+        if ready:
+            ss.simpler[i] = ready
+        else:
+            with st.spinner("Finding a simpler way…"):
+                ss.simpler[i] = call(tutor.explain_differently,
+                                     concept_title(ss.concept), ss.objective, text)
         st.rerun()
 
 
@@ -892,6 +946,11 @@ with tab_study:
         path_overview()
         rec_id, reason = curriculum.recommend(ss.profile)
         st.info(f"**Recommended now:** {curriculum.BY_ID[rec_id]['title']} - {reason}.")
+        # Start writing that lesson now, while the learner reads this page.
+        collect_lesson()
+        _rec = ss.profile.get("concepts", {}).get(rec_id, {})
+        prefetch_lesson(rec_id, profile_store.MAX_LEVEL if _rec.get("status") == "mastered"
+                        else _rec.get("level", 0) + 1)
 
         skip = st.toggle("Let me pick any step (skip ahead)",
                          help="Locked steps open when the step before them is "
@@ -1015,6 +1074,8 @@ with tab_study:
                 label, action = "Next question →", "question"
                 if (ss.get("prefetch") or {}).get("slot") != question_slot():
                     prefetch_question()      # ready by the time feedback is read
+            if action == "level":
+                prefetch_lesson(ss.concept, ss.level + 1)   # next level's lesson
 
             go, stop = st.columns([2, 1])
             if action != "mastered" and stop.button("Finish for today", width="stretch"):

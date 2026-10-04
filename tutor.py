@@ -416,6 +416,11 @@ Return JSON with these keys:
   correct], "correct": index of the correct option (0, 1 or 2),
   "explanation": 1-2 sentences why}}. The wrong options must be the typical
   beginner mistakes, not nonsense.
+- "simpler": a second, easier wording, shown only if the learner presses
+  "I didn't get it": {{"bridge": ..., "idea": ..., "example": ...}}. Each is
+  the SAME content as that card said again in everyday words - max 40 words,
+  at most 3 short sentences, no new fact, symbol or formula, and never the
+  words "imagine" or "picture" (a real picture is shown next to it).
 
 {CONVENTIONS}
 
@@ -449,6 +454,11 @@ Study material (use it as the source of truth):
     if figures:
         cards["figure"] = str(raw.get("figure") or "").strip()
         cards["figure_numbers"] = raw.get("figure_numbers")
+    # Written in the same call, so "I didn't get it" opens at once.
+    easy = raw.get("simpler")
+    cards["simpler"] = ({k: str(easy[k]).strip() for k in ("bridge", "idea", "example")
+                         if str(easy.get(k) or "").strip()}
+                        if isinstance(easy, dict) else {})
     right = options[correct]
     random.shuffle(options)
     cards["try_it"] = {"question": str(t["question"]).strip(), "options": options,
