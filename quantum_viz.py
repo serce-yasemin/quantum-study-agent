@@ -430,3 +430,29 @@ def normalize_figure(x: float, y: float) -> go.Figure:
     top = max(1.3, x + 0.6, y + 0.6)
     _flat_axes(fig, -0.25, top, height=380)
     return fig
+
+
+def outer_table_figure(column: list[float], row: list[float]) -> go.Figure:
+    """Any column times any row as a multiplication table: entry (i, j) of
+    the outer product is column[i] · row[j]."""
+    z = [[c * r for r in row] for c in column]
+    top = max(1.0, max(abs(v) for line in z for v in line))
+    fig = go.Figure(go.Heatmap(
+        z=[[abs(v) / top for v in line] for line in z],
+        x=[f"row entry {j + 1}:  {r:g}" for j, r in enumerate(row)],
+        y=[f"column entry {i + 1}:  {c:g}" for i, c in enumerate(column)],
+        zmin=0, zmax=1, colorscale=SEQ_BLUE, xgap=2, ygap=2, showscale=False,
+        hoverinfo="skip"))
+    for i, c in enumerate(column):
+        for j, r in enumerate(row):
+            fig.add_annotation(
+                x=j, y=i, showarrow=False,
+                text=f"{c:g} · {r:g}<br><b>{c * r:g}</b>",
+                font=dict(size=15, color=_cell_ink(abs(c * r) / top)))
+    fig.update_layout(
+        height=300, margin=dict(l=10, r=10, t=30, b=10),
+        xaxis=dict(side="top", fixedrange=True),
+        yaxis=dict(autorange="reversed", fixedrange=True),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT))
+    return fig

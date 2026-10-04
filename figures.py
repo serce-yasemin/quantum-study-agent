@@ -26,8 +26,8 @@ CATALOGUE = {
                  "relative phase φ turns it without changing P(0) or P(1)",
     },
     "outer_product": {
-        "table": "the outer product as a multiplication table: column entry "
-                 "times row entry",
+        "outer_table": "any column vector times any row vector as a "
+                       "multiplication table: entry (i, j) = column[i] · row[j]",
         "matrix": "the matrix |ψ⟩⟨ψ| of a chosen state as a coloured grid, next "
                   "to the state on the Bloch sphere",
     },
@@ -75,9 +75,29 @@ def _state(name: str) -> np.ndarray:
     return qv.density_from_state(qv.pure_state(*qv.NAMED_STATES[name]))
 
 
-def show(concept: str, key: str, k: str) -> None:
+# Pictures that can start from the numbers of the lesson's worked example:
+# picture key -> how many numbers it takes.
+TAKES_NUMBERS = {"outer_table": 4, "normalize": 2}
+
+
+def clean_numbers(key: str | None, numbers) -> list[float] | None:
+    """The model may hand over the worked example's numbers so the picture
+    starts from them. Accept them only if they are exactly the right count of
+    small real numbers - otherwise the picture uses its own defaults."""
+    want = TAKES_NUMBERS.get(key)
+    try:
+        values = [float(v) for v in numbers]
+    except (TypeError, ValueError):
+        return None
+    if not want or len(values) != want or any(not -9 <= v <= 9 for v in values):
+        return None
+    return values
+
+
+def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> None:
     """Draw one picture. k makes the widget keys unique (the same picture can
-    be on the idea card and in an "I didn't get it" box)."""
+    be on the idea card and in an "I didn't get it" box). numbers: optional
+    start values taken from the lesson's worked example."""
     chart = dict(width="stretch")
     if key == "chances":
         theta = st.slider("Turn the arrow", 0, 180, 60, key=f"{k}_t",
@@ -88,10 +108,24 @@ def show(concept: str, key: str, k: str) -> None:
         st.caption("The arrow is the qubit; it always has length 1. Its two "
                    "shadows are the amplitudes a and b. Square each shadow → the "
                    "two chances. They always fill the bar.")
+    elif key == "outer_table":
+        c1, c2, r1, r2 = numbers or [1.0, 2.0, 3.0, 4.0]
+        st.caption("Change any number and watch the table.")
+        cols = st.columns(4)
+        column = [cols[0].number_input("column, top", -9.0, 9.0, c1, 1.0, key=f"{k}_c1"),
+                  cols[1].number_input("column, bottom", -9.0, 9.0, c2, 1.0, key=f"{k}_c2")]
+        row = [cols[2].number_input("row, left", -9.0, 9.0, r1, 1.0, key=f"{k}_r1"),
+               cols[3].number_input("row, right", -9.0, 9.0, r2, 1.0, key=f"{k}_r2")]
+        st.plotly_chart(qv.outer_table_figure(column, row), key=f"{k}_a", **chart)
+        st.caption("A multiplication table: every entry of the column times every "
+                   "entry of the row. Each row of the result is the row vector "
+                   "scaled by one column entry. (If the row comes from a bra with "
+                   "complex entries, those entries are the conjugates.)")
     elif key == "normalize":
         left, right = st.columns(2)
-        x = left.slider("first entry", 0.0, 5.0, 3.0, 0.5, key=f"{k}_x")
-        y = right.slider("second entry", 0.0, 5.0, 4.0, 0.5, key=f"{k}_y")
+        x0, y0 = [min(5.0, abs(v)) for v in (numbers or [3.0, 4.0])]
+        x = left.slider("first entry", 0.0, 5.0, x0, 0.5, key=f"{k}_x")
+        y = right.slider("second entry", 0.0, 5.0, y0, 0.5, key=f"{k}_y")
         if x == 0 and y == 0:
             st.caption("The zero vector has no direction - it cannot be normalized.")
             return

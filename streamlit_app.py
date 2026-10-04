@@ -182,7 +182,7 @@ def finish_login(client, user) -> None:
 # What a lesson or question in progress consists of. Saved inside the profile
 # after every step, so a learner who was interrupted lands where they stopped.
 RESUME_KEYS = ["concept", "material", "level", "stage", "objective", "cards",
-               "lesson", "figure", "card", "simpler", "try_pick", "wrong_this_level",
+               "lesson", "figure", "figure_numbers", "card", "simpler", "try_pick", "wrong_this_level",
                "asked", "question", "show_hint", "result", "passed",
                "last_answer", "review", "session_weak", "was_mastered"]
 RESUME_STAGES = ("lesson", "question", "feedback")
@@ -575,7 +575,7 @@ def start_level(fresh: bool = False) -> None:
     """
     material = ss.material
     saved = ss.profile.setdefault("lessons", {})
-    key = (f"{ss.concept}:{ss.level}:v2:"
+    key = (f"{ss.concept}:{ss.level}:v3:"
            f"{hashlib.sha256(material.encode()).hexdigest()[:8]}")
     plan = None if fresh else saved.get(key)
     if plan is None:
@@ -595,6 +595,8 @@ def start_level(fresh: bool = False) -> None:
                          ss.objective)
     # The picture is the model's pick from our catalogue, checked by code.
     ss.figure = figures.valid(ss.concept, (plan or {}).get("figure"))
+    ss.figure_numbers = figures.clean_numbers(ss.figure,
+                                              (plan or {}).get("figure_numbers"))
     ss.card, ss.simpler, ss.try_pick = 0, {}, None
     ss.wrong_this_level = 0
     ss.stage = "lesson"
@@ -650,7 +652,8 @@ def explain_again(text: str) -> None:
     if ss.simpler.get(i):
         with st.container(border=True):
             if ss.get("figure") and i != 1:      # card 2 already shows it
-                figures.show(ss.concept, ss.figure, f"again{i}")
+                figures.show(ss.concept, ss.figure, f"again{i}",
+                             ss.get("figure_numbers"))
             st.write(ss.simpler[i])
     elif st.button("🤔 I didn't get it - show me", key=f"simpler_{i}"):
         with st.spinner("Finding a simpler way…"):
@@ -676,7 +679,7 @@ def lesson_cards_view() -> None:
             explain_again(cards["idea"])
         if has_figure:
             with right:
-                figures.show(ss.concept, ss.figure, "idea")
+                figures.show(ss.concept, ss.figure, "idea", ss.get("figure_numbers"))
     elif i == 2:
         st.markdown(f"#### ✏️ {CARD_NAMES[2]}")
         for n, step in enumerate(cards["example"], 1):
@@ -1112,12 +1115,17 @@ with tab_profile:
                 f1, f2, f3 = st.columns(3)
                 first = f1.text_input("First name", me.get("first", ""), max_chars=30)
                 last = f2.text_input("Last name", me.get("last", ""), max_chars=30)
-                nick = f3.text_input("Nickname (shown in the app)",
-                                     me.get("nick") or me.get("name", ""), max_chars=30)
+                nick = f3.text_input("Nickname", me.get("nick") or me.get("name", ""),
+                                     max_chars=30)
+                st.caption("The app greets you by your nickname. Leave the nickname "
+                           "empty to be greeted by your first name.")
                 if st.form_submit_button("Save", type="primary"):
                     me.update(first=first.strip(), last=last.strip(), nick=nick.strip())
                     me.pop("name", None)
+                    ss.name_saved = True
                     st.rerun()
+            if ss.pop("name_saved", False):
+                st.success(f"Saved. The app now calls you **{display_name(me) or '-'}**.")
             st.caption(f"Account e-mail: {ss.user_email}")
 
     st.subheader("Your learner profile")

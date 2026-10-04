@@ -356,7 +356,7 @@ def lesson_plan(material: str, concept: str, difficulty: int,
     if not cards or not cards.get("objective"):
         return None
     return {"objective": cards.pop("objective"), "figure": cards.pop("figure", None),
-            "cards": cards}
+            "figure_numbers": cards.pop("figure_numbers", None), "cards": cards}
 
 
 def lesson_cards(material: str, concept: str, difficulty: int,
@@ -389,7 +389,12 @@ def lesson_cards(material: str, concept: str, difficulty: int,
         listing = "\n".join(f'  "{key}": {what}' for key, what in figures.items())
         figure_key = ('- "figure": the key of the ONE picture from this list that '
                       "shows exactly the idea you teach, or \"none\" if no picture "
-                      "fits (a wrong picture is worse than none):\n" + listing + "\n")
+                      "fits (a wrong picture is worse than none):\n" + listing + "\n"
+                      '- "figure_numbers": the plain real numbers your worked '
+                      "example starts from, as a list, so the picture can start "
+                      "from the same numbers - for \"outer_table\": [column top, "
+                      "column bottom, row left, row right]; for \"normalize\": "
+                      "[first entry, second entry]; otherwise [].\n")
     else:
         figure_key = ""
     prompt = f"""Teach a beginner the concept "{concept}" in four small cards.
@@ -443,6 +448,7 @@ Study material (use it as the source of truth):
         cards["objective"] = cards["objective"][0] if cards["objective"] else ""
     if figures:
         cards["figure"] = str(raw.get("figure") or "").strip()
+        cards["figure_numbers"] = raw.get("figure_numbers")
     right = options[correct]
     random.shuffle(options)
     cards["try_it"] = {"question": str(t["question"]).strip(), "options": options,
