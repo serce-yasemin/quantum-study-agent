@@ -1,0 +1,57 @@
+Entanglement and the Bell states: a short primer
+
+1. A state that is not a product
+A two-qubit state [p; q; r; s] (order 00, 01, 10, 11) is a product state when
+it can be written as (first qubit) ⊗ (second qubit); the test is p·s = q·r.
+A state that fails the test is called entangled: neither qubit has a state
+vector of its own.
+
+2. The Bell state |Φ+⟩
+
+    |Φ+⟩ = (|00⟩ + |11⟩)/√2 = [0.707; 0; 0; 0.707]
+
+Test: p·s = 0.707·0.707 = 0.5, but q·r = 0. Not equal, so it is entangled.
+
+3. How to make it: H, then CNOT
+Start with |00⟩ = [1; 0; 0; 0].
+Step 1 - H on the first qubit: (|0⟩ + |1⟩)/√2 ⊗ |0⟩ = (|00⟩ + |10⟩)/√2
+         = [0.707; 0; 0.707; 0]. Still a product state (p·s = 0 = q·r).
+Step 2 - CNOT (first qubit controls): |10⟩ becomes |11⟩, |00⟩ stays.
+         Result: (|00⟩ + |11⟩)/√2 = [0.707; 0; 0; 0.707].
+The single-qubit gate H creates the superposition; the two-qubit gate CNOT
+turns it into entanglement.
+
+4. What a measurement shows
+P(00) = 0.5, P(11) = 0.5, P(01) = P(10) = 0.
+Each qubit alone looks like a fair coin: P(first = 0) = 0.5. But the two
+results always agree. In a product state the probabilities multiply; here
+P(00) = 0.5 is not P(first = 0)·P(second = 0) = 0.25. That is the sign of
+correlation.
+
+5. Correlated in more than one basis
+Two ordinary coins glued together would also always agree. The Bell state
+does more: written in the X basis it has the same form,
+
+    |Φ+⟩ = (|++⟩ + |−−⟩)/√2
+
+so measuring both qubits in the X basis also always gives equal results:
+P(++) = P(−−) = 0.5 and P(+−) = P(−+) = 0. No pair of classical coins is
+perfectly correlated in two different bases at once.
+
+6. The four Bell states
+The same circuit (H on the first qubit, then CNOT) applied to the four basis
+states gives the four Bell states:
+    from |00⟩:  |Φ+⟩ = (|00⟩ + |11⟩)/√2
+    from |10⟩:  |Φ−⟩ = (|00⟩ − |11⟩)/√2
+    from |01⟩:  |Ψ+⟩ = (|01⟩ + |10⟩)/√2
+    from |11⟩:  |Ψ−⟩ = (|01⟩ − |10⟩)/√2
+In |Φ±⟩ the two results are always equal; in |Ψ±⟩ they are always opposite.
+The four states are orthogonal to each other and form a basis for two qubits.
+
+7. More and less entangled
+Entanglement is not all-or-nothing. 0.8|00⟩ + 0.6|11⟩ = [0.8; 0; 0; 0.6] is
+entangled (p·s = 0.48, q·r = 0), but less than a Bell state: the results still
+always agree, yet 00 comes up with probability 0.64 and 11 with 0.36. The
+Bell states are called maximally entangled.
+The size of p·s − q·r is a quick measure: 0 for a product state, at most 0.5
+(reached by the Bell states).

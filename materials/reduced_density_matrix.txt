@@ -1,0 +1,62 @@
+The reduced density matrix: a short primer
+
+1. The question
+Two qubits A and B are in a joint state. What is the state of qubit A alone,
+for someone who can only look at A? If the pair is a product state, the answer
+is simply A's own state vector. If the pair is entangled, A has no state
+vector - but it always has a density matrix. It is called the reduced density
+matrix ρ_A.
+
+2. The recipe for a pure two-qubit state
+Write the state [p; q; r; s] (order 00, 01, 10, 11) as a 2×2 table M whose
+rows belong to qubit A and whose columns belong to qubit B:
+
+    M = [[p, q], [r, s]]
+
+Then
+
+    ρ_A = M·M†        ρ_B = Mᵀ·M*
+
+For real amplitudes:
+    ρ_A = [[p² + q², p·r + q·s], [p·r + q·s, r² + s²]]
+The diagonal holds P(A = 0) = p² + q² and P(A = 1) = r² + s²: the same sums
+as for the marginal probabilities. This step - summing over everything qubit
+B could be - is called the partial trace over B, written ρ_A = Tr_B(ρ_AB).
+
+3. A product state gives a pure reduced state
+[0.424; 0.424; 0.566; 0.566] is (0.6|0⟩ + 0.8|1⟩) ⊗ |+⟩.
+    M = [[0.424, 0.424], [0.566, 0.566]]
+    ρ_A = [[0.36, 0.48], [0.48, 0.64]]
+This is exactly |ψ⟩⟨ψ| for 0.6|0⟩ + 0.8|1⟩. Purity Tr(ρ_A²) = 1.
+
+4. A Bell state gives the maximally mixed state
+|Φ+⟩ = [0.707; 0; 0; 0.707].
+    M = [[0.707, 0], [0, 0.707]]
+    ρ_A = [[0.5, 0], [0, 0.5]] = I/2
+Purity Tr(ρ_A²) = 0.5, Bloch vector (0, 0, 0): the centre of the sphere.
+The pair as a whole is in a pure state - everything about it is known - yet
+each qubit alone is as random as a qubit can be. The information sits in the
+correlations, not in the parts.
+
+5. In between
+0.8|00⟩ + 0.6|11⟩ = [0.8; 0; 0; 0.6].
+    ρ_A = [[0.64, 0], [0, 0.36]]
+Purity = 0.64² + 0.36² = 0.5392. Bloch vector (0, 0, 0.28): inside the sphere,
+but not at the centre.
+
+6. Purity of the part measures entanglement of the whole
+For a pure two-qubit state:
+    Tr(ρ_A²) = 1          the pair is a product state (not entangled)
+    Tr(ρ_A²) < 1          the pair is entangled
+    Tr(ρ_A²) = 0.5        maximally entangled (a Bell state)
+Both parts always have the same purity: Tr(ρ_A²) = Tr(ρ_B²).
+
+7. Why this is the right description of A
+Every measurement on A alone - in any basis - has exactly the probabilities
+that ρ_A gives, P(b) = ⟨b|ρ_A|b⟩. Nothing done to qubit B changes them. For
+the Bell state ρ_A = I/2, so A gives 50/50 in every basis.
+
+8. A mixed state from a pure one
+Earlier, mixed states came from not knowing which state was prepared. Here is
+a second source: a qubit that is entangled with something else is mixed all by
+itself, even though nothing about the pair is unknown.

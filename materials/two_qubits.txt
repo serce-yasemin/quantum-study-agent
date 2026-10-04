@@ -1,0 +1,58 @@
+Two qubits and the tensor product: a short primer
+
+1. Four basis states
+Two qubits together have four definite states: |00⟩, |01⟩, |10⟩, |11⟩. The
+first digit belongs to the first qubit, the second digit to the second. A
+general two-qubit state is a superposition of all four:
+
+    |ψ⟩ = p|00⟩ + q|01⟩ + r|10⟩ + s|11⟩
+
+written as a column [p; q; r; s], always in the order 00, 01, 10, 11.
+Normalization: |p|² + |q|² + |r|² + |s|² = 1.
+
+2. Probabilities
+Measuring both qubits gives 00 with probability |p|², 01 with |q|², 10 with
+|r|² and 11 with |s|².
+The first qubit alone: P(first = 0) = |p|² + |q|² (add the outcomes that
+start with 0), P(first = 1) = |r|² + |s|².
+
+3. The tensor product builds a two-qubit state from two single qubits
+If the first qubit is [a; b] and the second is [c; d], the pair is
+
+    [a; b] ⊗ [c; d] = [a·c; a·d; b·c; b·d]
+
+Rule: take each entry of the first vector and multiply the whole second
+vector by it. With plain numbers: [1; 2] ⊗ [3; 4] = [3; 4; 6; 8].
+In ket notation |ψ⟩ ⊗ |φ⟩ is also written |ψ⟩|φ⟩, and |0⟩ ⊗ |1⟩ = |01⟩.
+
+4. A worked example
+First qubit 0.6|0⟩ + 0.8|1⟩, second qubit |+⟩ = [0.707; 0.707].
+    [0.6; 0.8] ⊗ [0.707; 0.707] = [0.424; 0.424; 0.566; 0.566]
+Probabilities: 0.18, 0.18, 0.32, 0.32 (they add up to 1).
+P(first = 0) = 0.18 + 0.18 = 0.36 - the same as for the first qubit alone.
+In a product state the probabilities multiply: P(00) = P(first = 0) ·
+P(second = 0) = 0.36 · 0.5 = 0.18. The two qubits are independent.
+
+5. Product states
+A state that can be written as (one qubit) ⊗ (other qubit) is called a
+product state. Quick test for [p; q; r; s]: it is a product state exactly
+when p·s = q·r.
+Example: [0.424; 0.424; 0.566; 0.566] gives 0.424·0.566 = 0.424·0.566 - a
+product state. [0.5; 0.5; 0.5; −0.5] gives p·s = −0.25 but q·r = 0.25 - not a
+product state, although all four outcomes are equally likely.
+
+6. A gate on one of the two qubits
+A gate U on the first qubit, nothing on the second, is the 4×4 matrix U ⊗ I;
+a gate on the second qubit is I ⊗ U. Example: X ⊗ I flips the first digit:
+|00⟩ ↔ |10⟩ and |01⟩ ↔ |11⟩, so [p; q; r; s] → [r; s; p; q].
+For the worked example: [0.424; 0.424; 0.566; 0.566] → [0.566; 0.566; 0.424; 0.424].
+
+7. A gate on both qubits: CNOT
+CNOT uses the first qubit as control and the second as target: it flips the
+target only when the control is 1.
+
+    |00⟩ → |00⟩    |01⟩ → |01⟩    |10⟩ → |11⟩    |11⟩ → |10⟩
+
+On a column it swaps the last two entries: [p; q; r; s] → [p; q; s; r].
+    CNOT = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]]
+CNOT cannot be written as (gate) ⊗ (gate): it makes the qubits act together.
