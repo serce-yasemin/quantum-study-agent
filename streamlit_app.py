@@ -23,6 +23,7 @@ import json
 import os
 import re
 import threading
+import time
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -579,18 +580,28 @@ def prefetch_lesson(concept: str, level: int) -> None:
     material = curriculum.material(concept)
     key = lesson_key(concept, level, material)
     running = ss.get("lesson_prefetch")
-    if key in ss.profile.get("lessons", {}) or (running and running["key"] == key):
+    if key in ss.profile.get("lessons", {}):
         return
     if running and running["thread"].is_alive():
-        return
+        return                                  # one background lesson at a time
+    if running and running["key"] == key and running["box"].get("plan"):
+        return                                  # written, waiting to be collected
     box: dict = {}
     options = figures.options(concept)
 
     def work() -> None:
-        try:
-            box["plan"] = tutor.lesson_plan(material, concept, level, options)
-        except Exception as exc:               # the click falls back to a normal call
-            box["error"] = exc
+        # Two tries: the provider sometimes refuses a call made at the same
+        # moment as another one (the first question is written in parallel).
+        for attempt in range(2):
+            try:
+                box["plan"] = tutor.lesson_plan(material, concept, level, options)
+                if box["plan"]:
+                    box.pop("error", None)
+                    return
+                box["error"] = "the reply did not have the lesson shape"
+            except Exception as exc:           # the click falls back to a normal call
+                box["error"] = f"{type(exc).__name__}: {exc}"[:200]
+            time.sleep(3)
 
     thread = threading.Thread(target=work, daemon=True)
     thread.start()
@@ -610,6 +621,10 @@ def collect_lesson(key: str | None = None) -> None:
             running["thread"].join()
     if running["box"].get("plan"):
         ss.profile.setdefault("lessons", {})[running["key"]] = running["box"]["plan"]
+    elif running["key"] == key:
+        # Say why the lesson is written again now, instead of failing silently.
+        st.toast("Background lesson was not ready: "
+                 + str(running["box"].get("error") or "unknown reason"))
     ss.lesson_prefetch = None
 
 
