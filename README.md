@@ -19,7 +19,9 @@ re-reading the text.
   numbers are computed exactly (numpy), not by the AI.
 - **A learning path that starts from the basics** — state vectors → outer
   products → pure-state density matrices → mixed states → the Bloch sphere →
-  single-qubit gates (X, Z, H). Each step has its own
+  single-qubit gates (X, Z, H) → measuring in other bases → two qubits and
+  tensor products → entanglement and Bell states → the reduced density
+  matrix. Each step has its own
   short built-in primer. A step unlocks when the one before it is mastered
   (all three levels passed): unlocking the next step is the reward. The agent
   recommends what to study now — a due review first, otherwise the next step
@@ -112,6 +114,8 @@ re-reading the text.
 - [x] Homework check with a follow-up question and review page; lesson
       cards with figures, warm-up and points
 - [x] Path steps 5 and 6: the Bloch sphere, single-qubit gates X, Z, H
+- [x] Path steps 7 to 10: measuring in other bases, two qubits and tensor
+      products, entanglement and Bell states, the reduced density matrix
 - [x] Stay signed in, continue where you stopped, display name, answer boxes
       per question part, symbol picker, faster lesson start
 - [ ] Week 5 — a week of real daily use; demo built from real progress data

@@ -112,7 +112,8 @@ def fmt_complex(z: complex, digits: int = 3) -> str:
 # ---------- figures ----------
 
 def bloch_figure(points: list[dict], chord: bool = False,
-                 axis: tuple | None = None) -> go.Figure:
+                 axis: tuple | None = None,
+                 axis_label: str = "rotation axis") -> go.Figure:
     """points: [{"rho": ndarray, "label": str, "color": hex}, ...]
     chord=True draws the dashed segment between the first two points - every
     mixture of them lies on it."""
@@ -159,7 +160,7 @@ def bloch_figure(points: list[dict], chord: bool = False,
         ax, ay, az = (1.25 * np.array(axis)).tolist()
         fig.add_trace(go.Scatter3d(x=[-ax, ax], y=[-ay, ay], z=[-az, az], mode="lines",
                                    line=dict(color=COLOR_MIX, width=5, dash="dash"),
-                                   name="rotation axis", hoverinfo="skip"))
+                                   name=axis_label, hoverinfo="skip"))
 
     # State vectors: line from origin + marker at the tip, directly labeled.
     for pt in points:
@@ -265,10 +266,10 @@ def arrow_figure(theta_deg: float) -> go.Figure:
     return fig
 
 
-def chance_bar(p0: float) -> go.Figure:
-    """One bar of length 1, split into the chance of 0 and the chance of 1."""
+def chance_bar(p0: float, names: tuple = ("0", "1")) -> go.Figure:
+    """One bar of length 1, split into the chance of the two outcomes."""
     fig = go.Figure()
-    for value, name, color in ((p0, "0", COLOR_A), (1 - p0, "1", COLOR_B)):
+    for value, name, color in ((p0, names[0], COLOR_A), (1 - p0, names[1], COLOR_B)):
         fig.add_trace(go.Bar(
             x=[value], y=[""], orientation="h", marker=dict(color=color),
             text=f"chance of {name}: {value:.0%}" if value >= 0.12 else "",
@@ -432,15 +433,16 @@ def normalize_figure(x: float, y: float) -> go.Figure:
     return fig
 
 
-def outer_table_figure(column: list[float], row: list[float]) -> go.Figure:
+def outer_table_figure(column: list[float], row: list[float],
+                       names: tuple = ("column entry", "row entry")) -> go.Figure:
     """Any column times any row as a multiplication table: entry (i, j) of
     the outer product is column[i] · row[j]."""
     z = [[c * r for r in row] for c in column]
     top = max(1.0, max(abs(v) for line in z for v in line))
     fig = go.Figure(go.Heatmap(
         z=[[abs(v) / top for v in line] for line in z],
-        x=[f"row entry {j + 1}:  {r:g}" for j, r in enumerate(row)],
-        y=[f"column entry {i + 1}:  {c:g}" for i, c in enumerate(column)],
+        x=[f"{names[1]} {j + 1}:  {r:g}" for j, r in enumerate(row)],
+        y=[f"{names[0]} {i + 1}:  {c:g}" for i, c in enumerate(column)],
         zmin=0, zmax=1, colorscale=SEQ_BLUE, xgap=2, ygap=2, showscale=False,
         hoverinfo="skip"))
     for i, c in enumerate(column):
@@ -453,6 +455,105 @@ def outer_table_figure(column: list[float], row: list[float]) -> go.Figure:
         height=300, margin=dict(l=10, r=10, t=30, b=10),
         xaxis=dict(side="top", fixedrange=True),
         yaxis=dict(autorange="reversed", fixedrange=True),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT))
+    return fig
+
+
+# ---------- measuring in other bases ----------
+
+BASIS_AXES = {"Z": ((0.0, 0.0, 1.0), ("0", "1")),
+              "X": ((1.0, 0.0, 0.0), ("+", "−")),
+              "Y": ((0.0, 1.0, 0.0), ("+i", "−i"))}
+
+
+def basis_probability(rho: np.ndarray, axis: tuple) -> float:
+    """P(first state of the basis) = (1 + r·n)/2."""
+    return float((1 + np.dot(bloch_vector(rho), axis)) / 2)
+
+
+def shadow_figure(state_deg: float, axis_deg: float) -> go.Figure:
+    """Flat cut through the sphere: the shadow of the state arrow on the
+    measurement axis sets the two chances."""
+    a, n = np.radians(state_deg), np.radians(axis_deg)
+    x, z = float(np.sin(a)), float(np.cos(a))
+    nx, nz = float(np.sin(n)), float(np.cos(n))
+    d = x * nx + z * nz                                   # r·n
+    fig = go.Figure()
+    _slice_base(fig)
+    fig.add_shape(type="line", x0=-1.3 * nx, y0=-1.3 * nz, x1=1.3 * nx, y1=1.3 * nz,
+                  line=dict(color=COLOR_MIX, width=3, dash="dash"))
+    fig.add_annotation(x=1.36 * nx, y=1.36 * nz, text="b₀", showarrow=False,
+                       font=dict(color=COLOR_MIX, size=14))
+    fig.add_annotation(x=-1.36 * nx, y=-1.36 * nz, text="b₁", showarrow=False,
+                       font=dict(color=COLOR_MIX, size=14))
+    fig.add_shape(type="line", x0=x, y0=z, x1=d * nx, y1=d * nz,
+                  line=dict(color=INK, width=1, dash="dot"))
+    fig.add_shape(type="line", x0=0, y0=0, x1=d * nx, y1=d * nz,
+                  line=dict(color=COLOR_B, width=7))
+    _slice_arrow(fig, x, z, COLOR_A, "|ψ⟩")
+    return fig
+
+
+# ---------- two qubits ----------
+
+KETS2 = ["|00⟩", "|01⟩", "|10⟩", "|11⟩"]
+CNOT = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=complex)
+_I2 = np.eye(2, dtype=complex)
+GATES2 = {
+    "X on first": np.kron(GATES["X"], _I2),
+    "X on second": np.kron(_I2, GATES["X"]),
+    "H on first": np.kron(GATES["H"], _I2),
+    "CNOT": CNOT,
+}
+_S = 1 / np.sqrt(2)
+STATES2 = {
+    "|00⟩": [1, 0, 0, 0],
+    "|10⟩": [0, 0, 1, 0],
+    "|+⟩|0⟩": [_S, 0, _S, 0],
+    "(0.6|0⟩ + 0.8|1⟩)|+⟩": [0.6 * _S, 0.6 * _S, 0.8 * _S, 0.8 * _S],
+    "Bell |Φ+⟩": [_S, 0, 0, _S],
+    "0.8|00⟩ + 0.6|11⟩": [0.8, 0, 0, 0.6],
+    "½(|00⟩ + |01⟩ + |10⟩ − |11⟩)": [0.5, 0.5, 0.5, -0.5],
+}
+
+
+def product_gap(state) -> float:
+    """p·s − q·r for [p; q; r; s]: 0 exactly for a product state."""
+    p, q, r, s = np.asarray(state, dtype=complex)
+    return float(abs(p * s - q * r))
+
+
+def reduced_a(state) -> np.ndarray:
+    """ρ_A = M·M† with M = [[p, q], [r, s]] (rows: qubit A, columns: qubit B)."""
+    m = np.asarray(state, dtype=complex).reshape(2, 2)
+    return m @ m.conj().T
+
+
+def amplitude_bars(before, after=None, names: tuple = ("before", "after"),
+                   squared: bool = False) -> go.Figure:
+    """The four amplitudes (or, squared, the four probabilities) of a two-qubit
+    state as bars; with `after`, two groups side by side."""
+    def values(v):
+        v = np.real_if_close(np.asarray(v, dtype=complex))
+        return (np.abs(v) ** 2 if squared else np.real(v)).astype(float)
+    fig = go.Figure()
+    groups = [(before, names[0], COLOR_A)] + ([(after, names[1], COLOR_B)]
+                                              if after is not None else [])
+    for state, name, color in groups:
+        vals = values(state)
+        fig.add_trace(go.Bar(x=KETS2, y=vals, name=name, marker=dict(color=color),
+                             text=[f"{v + 0:.2f}" for v in vals],
+                             textposition="outside", cliponaxis=False,
+                             hovertemplate="%{x}: %{y:.3f}<extra>" + name + "</extra>"))
+    fig.update_layout(
+        barmode="group", height=280, margin=dict(l=10, r=10, t=30, b=10),
+        showlegend=after is not None,
+        legend=dict(orientation="h", y=1.18, x=0),
+        yaxis=dict(range=[0, 1.12] if squared else [-1.12, 1.12], gridcolor=GRID,
+                   zerolinecolor=INK, fixedrange=True,
+                   title=dict(text="probability" if squared else "amplitude")),
+        xaxis=dict(fixedrange=True),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=TEXT))
     return fig

@@ -61,6 +61,34 @@ BOOK_SECTIONS = {
         {"book": NC, "section": "4.2 Single qubit operations", "pages": "174-177",
          "focus": "Pauli matrices, Hadamard, and gates as rotations of the Bloch sphere"},
     ],
+    "measurement_bases": [
+        {"book": NC, "section": "1.3.3 Measurements in bases other than the computational basis",
+         "pages": "22", "focus": "measuring a qubit in the |+⟩, |−⟩ basis"},
+        {"book": NC, "section": "2.2.5 Projective measurements", "pages": "87-90",
+         "focus": "measuring an observable; probabilities from projectors"},
+    ],
+    "two_qubits": [
+        {"book": NC, "section": "1.2.1 Multiple qubits", "pages": "16-17",
+         "focus": "the four basis states of two qubits and their probabilities"},
+        {"book": NC, "section": "2.1.7 Tensor products", "pages": "71-75",
+         "focus": "how the tensor product of vectors and of matrices is computed"},
+        {"book": NC, "section": "1.3.2 Multiple qubit gates", "pages": "20-22",
+         "focus": "the controlled-NOT gate"},
+    ],
+    "entanglement": [
+        {"book": NC, "section": "1.3.6 Example: Bell states", "pages": "25-26",
+         "focus": "the circuit (Hadamard, then CNOT) that makes the four Bell states"},
+        {"book": NC, "section": "2.2.8 Composite systems", "pages": "93-96",
+         "focus": "states of composite systems; entangled states are not products"},
+        {"book": NC, "section": "2.6 EPR and the Bell inequality", "pages": "111-117",
+         "focus": "why Bell-state correlations cannot be explained classically"},
+    ],
+    "reduced_density_matrix": [
+        {"book": NC, "section": "2.4.3 The reduced density operator", "pages": "105-109",
+         "focus": "the partial trace; the reduced state of a Bell pair is I/2"},
+        {"book": NC, "section": "2.5 The Schmidt decomposition and purifications",
+         "pages": "109-111", "focus": "both parts of a pure state have the same purity"},
+    ],
 }
 
 # Web search only looks at these sites (subdomains included).

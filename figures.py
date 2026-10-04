@@ -53,6 +53,34 @@ CATALOGUE = {
         "mirror": "in a flat cut through the sphere each gate acts like a "
                   "mirror: before and after arrows",
     },
+    "measurement_bases": {
+        "axis": "a state on the Bloch sphere and a measurement basis Z, X or Y "
+                "drawn as an axis; the two chances come from where the arrow "
+                "points along that axis",
+        "shadow": "a flat cut through the sphere: the shadow of the state arrow "
+                  "on a turnable measurement axis gives P = (1 + shadow)/2",
+    },
+    "two_qubits": {
+        "tensor": "the tensor product [a; b] ⊗ [c; d] as a multiplication "
+                  "table giving the four entries a·c, a·d, b·c, b·d",
+        "gate2": "the four amplitudes of a two-qubit state as bars, before and "
+                 "after a gate (X on one qubit, or CNOT)",
+    },
+    "entanglement": {
+        "bell_circuit": "the four amplitudes step by step while H and then CNOT "
+                        "turn a basis state into a Bell state, with the product "
+                        "test p·s = q·r at each step",
+        "how_entangled": "the state cos(t)|00⟩ + sin(t)|11⟩ for a chosen t: its "
+                         "outcome probabilities and how far it is from a "
+                         "product state",
+    },
+    "reduced_density_matrix": {
+        "reduced": "the state cos(t)|00⟩ + sin(t)|11⟩ for a chosen t: the "
+                   "reduced density matrix of qubit A, its point inside the "
+                   "Bloch sphere and its purity",
+        "partial_trace": "for a chosen two-qubit state: the 2×2 table M of its "
+                         "amplitudes and the reduced density matrix ρ_A = M·M†",
+    },
 }
 
 
@@ -77,7 +105,7 @@ def _state(name: str) -> np.ndarray:
 
 # Pictures that can start from the numbers of the lesson's worked example:
 # picture key -> how many numbers it takes.
-TAKES_NUMBERS = {"outer_table": 4, "normalize": 2}
+TAKES_NUMBERS = {"outer_table": 4, "normalize": 2, "tensor": 4}
 
 
 def clean_numbers(key: str | None, numbers) -> list[float] | None:
@@ -239,3 +267,121 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
         st.caption("The sphere seen from the side. In this flat cut each gate works "
                    "like a mirror on the dashed line (in 3D: half a turn around "
                    "that line). An arrow lying on the line does not move.")
+    elif key == "axis":
+        theta = st.slider("θ - tilt of the state (degrees)", 0, 180, 106, key=f"{k}_t")
+        phi = st.slider("φ - turn of the state (degrees)", 0, 359, 0, key=f"{k}_p")
+        basis = st.radio("Measure in the basis", list(qv.BASIS_AXES), horizontal=True,
+                         index=1, key=f"{k}_b")
+        axis, names = qv.BASIS_AXES[basis]
+        rho = qv.density_from_state(qv.pure_state(theta, phi))
+        x, y, z = qv.bloch_vector(rho) + 0.0
+        p0 = qv.basis_probability(rho, axis)
+        st.code(f"Bloch vector r = ({x:.2f}, {y:.2f}, {z:.2f})\n"
+                f"P({names[0]}) = (1 + r·n)/2 = {p0:.2f}    "
+                f"P({names[1]}) = {1 - p0:.2f}", language=None)
+        st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": "|ψ⟩",
+                                         "color": qv.COLOR_A}], axis=axis,
+                                        axis_label="measurement axis"),
+                        key=f"{k}_a", **chart)
+        st.plotly_chart(qv.chance_bar(p0, names), key=f"{k}_c", **chart)
+        st.caption("The dashed line is the question you ask. The closer the arrow "
+                   "points to one end of that line, the more likely that answer. "
+                   "Same state, different line → different chances.")
+    elif key == "shadow":
+        state = st.slider("State arrow (degrees from |0⟩)", 0, 359, 106, key=f"{k}_t")
+        axis = st.slider("Measurement axis (degrees from |0⟩)", 0, 180, 90, key=f"{k}_n",
+                         help="0° = the 0/1 basis, 90° = the +/− basis.")
+        d = float(np.cos(np.radians(state - axis)))
+        st.plotly_chart(qv.shadow_figure(state, axis), key=f"{k}_a", **chart)
+        st.code(f"shadow r·n = {d + 0:.2f}\n"
+                f"P(b₀) = (1 + {d + 0:.2f})/2 = {(1 + d) / 2:.2f}    "
+                f"P(b₁) = {(1 - d) / 2:.2f}", language=None)
+        st.plotly_chart(qv.chance_bar((1 + d) / 2, ("b₀", "b₁")), key=f"{k}_c", **chart)
+        st.caption("The thick line is the shadow of the arrow on the dashed "
+                   "measurement axis. Long shadow toward b₀ → b₀ is almost "
+                   "certain. No shadow (right angle) → half and half.")
+    elif key == "tensor":
+        a, b, c, d = numbers or [1.0, 2.0, 3.0, 4.0]
+        st.caption("Change any number and watch the table.")
+        cols = st.columns(4)
+        first = [cols[0].number_input("first qubit, top", -9.0, 9.0, a, 0.1, key=f"{k}_a1"),
+                 cols[1].number_input("first qubit, bottom", -9.0, 9.0, b, 0.1, key=f"{k}_a2")]
+        second = [cols[2].number_input("second qubit, top", -9.0, 9.0, c, 0.1, key=f"{k}_b1"),
+                  cols[3].number_input("second qubit, bottom", -9.0, 9.0, d, 0.1, key=f"{k}_b2")]
+        st.plotly_chart(qv.outer_table_figure(first, second,
+                                              ("first qubit, entry", "second qubit, entry")),
+                        key=f"{k}_a", **chart)
+        out = [x * y for x in first for y in second]
+        st.code("read the table row by row:\n[" + "; ".join(f"{v + 0:g}" for v in out)
+                + "]   (order 00, 01, 10, 11)", language=None)
+        st.caption("Each entry of the first vector multiplies the whole second "
+                   "vector. Reading the table row by row gives the four entries "
+                   "of the two-qubit state.")
+    elif key == "gate2":
+        names = list(qv.STATES2)
+        name = st.selectbox("Start state", names, index=3, key=f"{k}_s")
+        gate = st.radio("Gate", ["X on first", "X on second", "CNOT"], horizontal=True,
+                        index=2, key=f"{k}_g")
+        before = np.array(qv.STATES2[name], dtype=complex)
+        after = qv.GATES2[gate] @ before
+        st.plotly_chart(qv.amplitude_bars(before, after, ("before", f"after {gate}")),
+                        key=f"{k}_a", **chart)
+        st.caption("A gate only moves amplitudes between the four boxes. X on the "
+                   "first qubit swaps 00 ↔ 10 and 01 ↔ 11; CNOT swaps 10 ↔ 11 (it "
+                   "flips the second qubit only when the first is 1).")
+    elif key == "bell_circuit":
+        start = st.selectbox("Start state", qv.KETS2, key=f"{k}_s")
+        step = st.radio("Step", ["start", "after H on first", "after CNOT"],
+                        horizontal=True, index=2, key=f"{k}_g")
+        state = np.zeros(4, dtype=complex)
+        state[qv.KETS2.index(start)] = 1
+        if step != "start":
+            state = qv.GATES2["H on first"] @ state
+        if step == "after CNOT":
+            state = qv.CNOT @ state
+        p, q, r, s_ = np.real(state) + 0.0
+        gap = qv.product_gap(state)
+        st.plotly_chart(qv.amplitude_bars(state), key=f"{k}_a", **chart)
+        st.code(f"p·s = {p * s_ + 0:.2f}    q·r = {q * r + 0:.2f}    →  "
+                + ("equal: a product state" if gap < 1e-9 else "not equal: entangled"),
+                language=None)
+        st.caption("H spreads the first qubit over 0 and 1 - still a product "
+                   "state. CNOT then ties the second qubit to the first: only "
+                   "two boxes are left, and the state is entangled.")
+    elif key in ("how_entangled", "reduced"):
+        t = st.slider("t (degrees) in cos(t)|00⟩ + sin(t)|11⟩", 0, 90, 45, key=f"{k}_t",
+                      help="0° = |00⟩, 45° = Bell state, 90° = |11⟩.")
+        c, s_ = float(np.cos(np.radians(t))), float(np.sin(np.radians(t)))
+        state = [c, 0, 0, s_]
+        if key == "how_entangled":
+            st.plotly_chart(qv.amplitude_bars(state, squared=True), key=f"{k}_a", **chart)
+            st.code(f"state = {c:.2f}|00⟩ + {s_:.2f}|11⟩\n"
+                    f"p·s − q·r = {c * s_:.2f}   (0 = product state, 0.5 = Bell state)",
+                    language=None)
+            st.caption("The two results always agree. At 0° or 90° there is "
+                       "nothing to correlate (a product state); at 45° the state "
+                       "is a Bell state - as entangled as two qubits can be.")
+        else:
+            rho = qv.reduced_a(state)
+            st.code(f"state = {c:.2f}|00⟩ + {s_:.2f}|11⟩\n"
+                    f"ρ_A = [[{c * c:.2f}, 0], [0, {s_ * s_:.2f}]]    "
+                    f"purity Tr(ρ_A²) = {qv.purity(rho):.3f}", language=None)
+            st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": "qubit A alone",
+                                             "color": qv.COLOR_MIX}]),
+                            key=f"{k}_a", **chart)
+            st.caption("The more entangled the pair, the deeper qubit A alone sits "
+                       "inside the ball. At 45° (Bell state) it is at the centre: "
+                       "completely random on its own.")
+    elif key == "partial_trace":
+        names = list(qv.STATES2)
+        name = st.selectbox("Two-qubit state", names, index=names.index("Bell |Φ+⟩"),
+                            key=f"{k}_s")
+        p, q, r, s_ = [float(v) for v in qv.STATES2[name]]
+        rho = qv.reduced_a(qv.STATES2[name])
+        st.code(f"M = [[{p:.3f}, {q:.3f}],     rows: qubit A\n"
+                f"     [{r:.3f}, {s_:.3f}]]     columns: qubit B", language=None)
+        st.plotly_chart(qv.matrix_figure(rho, "ρ_A = M·M†"), key=f"{k}_a", **chart)
+        st.metric("purity Tr(ρ_A²)", f"{qv.purity(rho):.3f}")
+        st.caption("Each entry of ρ_A is one row of M times another row of M. "
+                   "Purity 1 = A has a state of its own (product state); "
+                   "below 1 = A is entangled with B.")

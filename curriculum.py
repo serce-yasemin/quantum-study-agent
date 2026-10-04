@@ -32,6 +32,14 @@ PATH = [
      "material": "bloch_sphere.txt", "prerequisites": ["mixed_state"]},
     {"id": "single_qubit_gates", "title": "Single-qubit gates X, Z, H",
      "material": "single_qubit_gates.txt", "prerequisites": ["bloch_sphere"]},
+    {"id": "measurement_bases", "title": "Measuring in other bases",
+     "material": "measurement_bases.txt", "prerequisites": ["single_qubit_gates"]},
+    {"id": "two_qubits", "title": "Two qubits and tensor products",
+     "material": "two_qubits.txt", "prerequisites": ["measurement_bases"]},
+    {"id": "entanglement", "title": "Entanglement and Bell states",
+     "material": "entanglement.txt", "prerequisites": ["two_qubits"]},
+    {"id": "reduced_density_matrix", "title": "The reduced density matrix",
+     "material": "reduced_density_matrix.txt", "prerequisites": ["entanglement"]},
 ]
 BY_ID = {step["id"]: step for step in PATH}
 
