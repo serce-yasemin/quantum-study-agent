@@ -371,3 +371,62 @@ def gate_slice_figure(gate: str, angle_deg: float) -> go.Figure:
     _slice_arrow(fig, x, z, COLOR_A, "before")
     _slice_arrow(fig, float(x2), float(z2), COLOR_B, f"after {gate}")
     return fig
+
+
+def _flat_axes(fig: go.Figure, lo: float, hi: float, height: int = 340) -> None:
+    axis = dict(range=[lo, hi], showgrid=False, zeroline=True, zerolinecolor=INK,
+                showticklabels=False, fixedrange=True)
+    fig.update_layout(
+        xaxis=dict(title=dict(text="how much |0⟩"), **axis),
+        yaxis=dict(title=dict(text="how much |1⟩"), scaleanchor="x", **axis),
+        showlegend=False, height=height, margin=dict(l=10, r=10, t=10, b=10),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT))
+
+
+def _flat_arrow(fig: go.Figure, x: float, y: float, color: str, label: str,
+                width: int = 4, below: bool = False) -> None:
+    fig.add_annotation(x=x, y=y, ax=0, ay=0, xref="x", yref="y", axref="x", ayref="y",
+                       arrowhead=3, arrowsize=1.2, arrowwidth=width, arrowcolor=color,
+                       text="")
+    fig.add_annotation(x=x, y=y, text=label, showarrow=False,
+                       xanchor="left" if x >= 0 else "right",
+                       yanchor="top" if below else "bottom",
+                       font=dict(color=color, size=14))
+
+
+def orthogonal_figure(theta_deg: float) -> go.Figure:
+    """A state with real amplitudes [a; b] and its orthogonal partner [−b; a]:
+    two arrows of length 1 at a right angle. Their inner product is 0."""
+    a = float(np.cos(np.radians(theta_deg) / 2))
+    b = float(np.sin(np.radians(theta_deg) / 2))
+    t = np.linspace(0, 2 * np.pi, 120)
+    fig = go.Figure(go.Scatter(x=np.cos(t), y=np.sin(t), mode="lines",
+                               line=dict(color=GRID, width=2, dash="dot"),
+                               hoverinfo="skip"))
+    s = 0.13                                           # the little right-angle mark
+    fig.add_trace(go.Scatter(x=[s * a, s * (a - b), -s * b], y=[s * b, s * (a + b), s * a],
+                             mode="lines", line=dict(color=INK, width=2),
+                             hoverinfo="skip"))
+    _flat_arrow(fig, a, b, COLOR_A, f"|ψ⟩ = [{a:.2f}; {b:.2f}]")
+    _flat_arrow(fig, -b, a, COLOR_B, f"partner = [{-b:.2f}; {a:.2f}]")
+    _flat_axes(fig, -1.5, 1.5, height=380)
+    return fig
+
+
+def normalize_figure(x: float, y: float) -> go.Figure:
+    """A vector that is too long or too short (grey) and the same direction
+    scaled to length 1 (blue): divide both entries by the length."""
+    length = float(np.hypot(x, y)) or 1.0
+    arc = np.linspace(0, np.pi / 2, 60)
+    fig = go.Figure(go.Scatter(x=np.cos(arc), y=np.sin(arc), mode="lines",
+                               line=dict(color=GRID, width=2, dash="dot"),
+                               hoverinfo="skip"))
+    fig.add_annotation(x=1.0, y=-0.02, text="length 1", showarrow=False,
+                       xanchor="center", yanchor="top", font=dict(color=INK, size=12))
+    _flat_arrow(fig, x, y, INK, f"before: [{x:g}; {y:g}], length {length:.2f}", width=2)
+    _flat_arrow(fig, x / length, y / length, COLOR_A,
+                f"  after: [{x / length:.2f}; {y / length:.2f}]", below=True)
+    top = max(1.3, x + 0.6, y + 0.6)
+    _flat_axes(fig, -0.25, top, height=380)
+    return fig

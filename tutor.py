@@ -347,18 +347,20 @@ Study material:
             "expected_answer": str(raw.get("expected_answer") or "").strip()}
 
 
-def lesson_plan(material: str, concept: str, difficulty: int) -> dict | None:
+def lesson_plan(material: str, concept: str, difficulty: int,
+                figures: dict | None = None) -> dict | None:
     """Objective + lesson cards in ONE model call (starting a lesson used to
     take two calls, one after the other). Returns {"objective", "cards"} or
     None if the reply does not have the right shape."""
-    cards = lesson_cards(material, concept, difficulty, None)
+    cards = lesson_cards(material, concept, difficulty, None, figures)
     if not cards or not cards.get("objective"):
         return None
-    return {"objective": cards.pop("objective"), "cards": cards}
+    return {"objective": cards.pop("objective"), "figure": cards.pop("figure", None),
+            "cards": cards}
 
 
 def lesson_cards(material: str, concept: str, difficulty: int,
-                 objective: str | None) -> dict | None:
+                 objective: str | None, figures: dict | None = None) -> dict | None:
     """A lesson in four small cards instead of one block of text.
 
     1. bridge   - start from something the learner already knows
@@ -382,16 +384,24 @@ def lesson_cards(material: str, concept: str, difficulty: int,
                     "It may only use ideas that appear in the study material (plus "
                     "basic linear algebra) and must be teachable with one tiny "
                     "example.\n")
+    if figures:
+        # The model never draws: it only picks one of our own pictures by key.
+        listing = "\n".join(f'  "{key}": {what}' for key, what in figures.items())
+        figure_key = ('- "figure": the key of the ONE picture from this list that '
+                      "shows exactly the idea you teach, or \"none\" if no picture "
+                      "fits (a wrong picture is worse than none):\n" + listing + "\n")
+    else:
+        figure_key = ""
     prompt = f"""Teach a beginner the concept "{concept}" in four small cards.
 {goal}
 Assume they have NOT read the study material and know only basic linear algebra
 (vectors, matrices, complex numbers).
 
 Return JSON with these keys:
-{goal_key}- "bridge": at most 2 short sentences (max 30 words). Start from something they already know and
+{goal_key}{figure_key}- "bridge": at most 2 short sentences (max 30 words). Start from something they already know and
   say what is about to be new. No formulas beyond one tiny one.
-- "idea": the ONE new idea, max 45 words, short sentences. The figure next
-  to it does the showing - do not describe what a picture could show. Draw any vector or
+- "idea": the ONE new idea, max 45 words, short sentences. A picture is shown
+  next to it - do not describe what a picture could show. Draw any vector or
   matrix as a small text grid on its own lines.
 - "example": a worked example with small numbers, as a list of 3-5 steps.
   Each step is an object {{"step": what is written or computed in this line,
@@ -431,6 +441,8 @@ Study material (use it as the source of truth):
     if not objective:
         cards["objective"] = str(raw.get("objective") or "").strip().splitlines()[0:1]
         cards["objective"] = cards["objective"][0] if cards["objective"] else ""
+    if figures:
+        cards["figure"] = str(raw.get("figure") or "").strip()
     right = options[correct]
     random.shuffle(options)
     cards["try_it"] = {"question": str(t["question"]).strip(), "options": options,

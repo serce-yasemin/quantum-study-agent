@@ -18,11 +18,13 @@ and can be downloaded as JSON.
 """
 
 import hashlib
+import importlib
 import json
 import os
 import re
 import threading
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import streamlit as st
@@ -39,11 +41,28 @@ except Exception:            # no secrets file when running locally
     ACCESS_CODE = None
 
 import curriculum  # noqa: E402  (after env setup)
+import figures  # noqa: E402
 import homework  # noqa: E402
 import profile_store  # noqa: E402
+import rewards  # noqa: E402
 import store  # noqa: E402
 import quantum_viz as qv  # noqa: E402
 import tutor  # noqa: E402
+
+# After an update the server can keep an OLD copy of our own modules in memory
+# while this file is already new (seen live: "module 'tutor' has no attribute
+# 'lesson_plan'"). So remember when each module's file was last changed, and
+# load a module again from disk when its file is newer than what we loaded.
+_loaded = st.__dict__.setdefault("_qsa_module_times", {})
+for _module in (qv, curriculum, profile_store, store, tutor, homework, rewards,
+                figures):
+    try:
+        _changed = os.path.getmtime(_module.__file__)
+    except OSError:
+        continue
+    if _loaded.setdefault(_module.__name__, _changed) != _changed:
+        importlib.reload(_module)
+        _loaded[_module.__name__] = _changed
 
 MAX_WRONG_PER_LEVEL = 2   # after this many misses at a level: back to the lesson
 NEED = profile_store.CORRECT_IN_A_ROW_TO_PASS
@@ -56,49 +75,65 @@ ss = st.session_state
 # "Stay signed in on this device": when the screen sleeps, the browser drops
 # its connection and Streamlit starts a brand-new session with empty memory.
 # Two small cookies let the new session skip the access code and sign in again.
+#
+# Python cannot see or set the browser's cookies here (on Streamlit Cloud the
+# server is never sent them - checked live), so a tiny script in the page does
+# both: it writes the cookies we ask for and reports the two it finds.
 GATE_COOKIE, SESSION_COOKIE = "qsa_gate", "qsa_session"
 REMEMBER_DAYS = 7
+_BRIDGE_JS = """
+export default function(component) {
+    const { data, setStateValue } = component;
+    for (const [name, value] of Object.entries(data.set || {})) {
+        const age = value ? data.days * 86400 : 0;
+        document.cookie = `${name}=${encodeURIComponent(value)}; path=/; ` +
+                          `max-age=${age}; SameSite=Lax; Secure`;
+    }
+    const found = {};
+    for (const part of document.cookie.split(';')) {
+        const i = part.indexOf('=');
+        const name = part.slice(0, i).trim();
+        if (data.names.includes(name)) found[name] = decodeURIComponent(part.slice(i + 1));
+    }
+    const text = JSON.stringify(found);
+    if (window.__qsaCookies !== text) {      // report only when something changed
+        window.__qsaCookies = text;
+        setStateValue('cookies', found);
+    }
+}
+"""
+
+
+def cookie_bridge() -> None:
+    """Mount the script. ss.browser_cookies stays None until the browser has
+    answered (a moment after the page opens), then holds what it found."""
+    ss.setdefault("browser_cookies", None)
+    try:
+        bridge = st.components.v2.component("qsa_cookie_bridge", js=_BRIDGE_JS)
+        found = bridge(key="cookie_bridge", on_cookies_change=lambda: None,
+                       data={"set": ss.get("cookies", {}), "days": REMEMBER_DAYS,
+                             "names": [GATE_COOKIE, SESSION_COOKIE]}).cookies
+    except Exception:              # no bridge (old Streamlit): just no remembering
+        found = {}
+    if found is not None:
+        ss.browser_cookies = dict(found)
 
 
 def cookie(name: str) -> str | None:
-    """A cookie the browser sent when this session started."""
-    try:
-        return st.context.cookies.get(name)
-    except Exception:
-        return None
+    return (ss.get("browser_cookies") or {}).get(name)
 
 
 def want_cookie(name: str, value: str) -> None:
-    """Ask for a cookie to be set ("" = delete it). Written by sync_cookies()."""
+    """Ask for a cookie to be set ("" = delete it). The bridge writes it the
+    next time the page is drawn."""
     ss.setdefault("cookies", {})[name] = value
 
 
-def sync_cookies() -> None:
-    """Write the wanted cookies in the browser. Python cannot set a cookie
-    itself, so a tiny script does it. Values are checked first, so nothing
-    unexpected can end up inside the script."""
-    wanted = ss.get("cookies")
-    if not wanted:
-        return
-    lines = []
-    for name, value in sorted(wanted.items()):
-        if not re.fullmatch(r"[A-Za-z0-9_.\-]*", value):
-            continue
-        age = REMEMBER_DAYS * 86400 if value else 0
-        lines.append(f'DOC.cookie = "{name}={value}; path=/; max-age={age}; '
-                     'SameSite=Lax; Secure";')
-    try:
-        st.html("<script>const DOC = document; " + " ".join(lines) + "</script>",
-                unsafe_allow_javascript=True)
-    except TypeError:                      # older Streamlit: use a hidden frame
-        import streamlit.components.v1 as components
-        components.html("<script>const DOC = window.parent.document; "
-                        + " ".join(lines) + "</script>", height=0)
-
-
 def stop() -> None:
-    sync_cookies()
     st.stop()
+
+
+cookie_bridge()
 
 
 # ---------------------------------------------------------------- access gate
@@ -147,7 +182,7 @@ def finish_login(client, user) -> None:
 # What a lesson or question in progress consists of. Saved inside the profile
 # after every step, so a learner who was interrupted lands where they stopped.
 RESUME_KEYS = ["concept", "material", "level", "stage", "objective", "cards",
-               "lesson", "card", "simpler", "try_pick", "wrong_this_level",
+               "lesson", "figure", "card", "simpler", "try_pick", "wrong_this_level",
                "asked", "question", "show_hint", "result", "passed",
                "last_answer", "review", "session_weak", "was_mastered"]
 RESUME_STAGES = ("lesson", "question", "feedback")
@@ -237,16 +272,21 @@ def account_gate() -> None:
         return
     if ss.get("reset_user"):
         new_password_form()
-    if not ss.get("cookie_tried"):           # once per session: stay signed in
+    # Once per session, as soon as the browser has reported its cookies:
+    # sign in again with the remembered session.
+    if not ss.get("cookie_tried") and ss.get("browser_cookies") is not None:
         ss.cookie_tried = True
         token = cookie(SESSION_COOKIE)
         if token:
             try:
                 client = store.new_client()
                 finish_login(client, store.restore(client, token))
-                return
             except Exception:
                 want_cookie(SESSION_COOKIE, "")      # no longer valid: forget it
+            else:
+                # A remembered token works once: store its successor right away.
+                want_cookie(SESSION_COOKIE, store.refresh_token(client) or "")
+            st.rerun()
     st.title("⚛️ Quantum Study Agent")
     st.write("Sign in to keep your progress - it is saved to your account, so you "
              "can continue on any device.")
@@ -284,6 +324,19 @@ def account_gate() -> None:
             st.success("If an account exists for this address, a reset link is "
                        "on its way.")
     stop()
+
+
+def today() -> date:
+    """The learner's own calendar day (the server runs on UTC)."""
+    try:
+        return datetime.now(ZoneInfo(st.context.timezone)).date()
+    except Exception:
+        return date.today()
+
+
+def display_name(learner: dict) -> str:
+    return (learner.get("nick") or learner.get("first") or learner.get("name")
+            or "").strip()
 
 
 def concept_title(concept: str) -> str:
@@ -340,9 +393,12 @@ st.caption("A personal, stateful study agent for quantum computing · "
 if ss.get("user_id"):
     learner = ss.profile.setdefault("learner", {})
     left, right = st.columns([4, 1])
-    hello = f"👋 Hi, **{learner['name']}** · " if learner.get("name") else ""
-    left.markdown(f"{hello}⭐ **{ss.profile.get('points', 0)}** points · "
-                  ":gray[progress is saved automatically]")
+    points = ss.profile.get("points", 0)
+    lvl, run = rewards.level(points), rewards.streak(ss.profile, today())
+    hello = f"👋 Hi, **{display_name(learner)}** · " if display_name(learner) else ""
+    fire = f" · 🔥 **{run}**-day streak" if run else ""
+    left.markdown(f"{hello}{lvl['badge']} **{lvl['name']}** · ⭐ **{points}** "
+                  f"points{fire}")
     if right.button("Sign out"):
         save_resume()
         autosave()
@@ -353,19 +409,24 @@ if ss.get("user_id"):
         want_cookie(SESSION_COOKIE, "")
         ss.cookie_tried = True
         st.rerun()
-    if not learner.get("name"):
+    if not display_name(learner):
         with st.form("name_form", border=False):
             box, save = st.columns([3, 1], vertical_alignment="bottom")
             name = box.text_input("What should we call you?", max_chars=30,
                                   placeholder="Your first name or a nickname")
             if save.form_submit_button("Save") and name.strip():
-                learner["name"] = name.strip()
+                learner["nick"] = name.strip()
                 st.rerun()
     if ss.pop("resumed", False):
         st.info(f"▶️ Welcome back - **{concept_title(ss.concept)}** is waiting where "
-                "you stopped. Open the 📘 **Study** tab to continue.")
+                "you stopped, in the 📘 **Study** tab.")
 
-tab_explore, tab_study, tab_profile = st.tabs(["🔭 Explore", "📘 Study", "🗂️ My progress"])
+TABS = ["🔭 Explore", "📘 Study", "🗂️ My progress"]
+try:      # open on Study when a lesson or question is waiting there
+    tab_explore, tab_study, tab_profile = st.tabs(
+        TABS, default=TABS[1] if ss.stage != "start" else None)
+except TypeError:                                  # older Streamlit
+    tab_explore, tab_study, tab_profile = st.tabs(TABS)
 
 
 # ================================================================ EXPLORE
@@ -514,11 +575,12 @@ def start_level(fresh: bool = False) -> None:
     """
     material = ss.material
     saved = ss.profile.setdefault("lessons", {})
-    key = (f"{ss.concept}:{ss.level}:"
+    key = (f"{ss.concept}:{ss.level}:v2:"
            f"{hashlib.sha256(material.encode()).hexdigest()[:8]}")
     plan = None if fresh else saved.get(key)
     if plan is None:
         plan = call(tutor.lesson_plan, material, ss.concept, ss.level,
+                    figures.options(ss.concept),
                     label="Writing your lesson - this can take up to a minute…")
         if plan and ss.concept in curriculum.BY_ID:
             saved[key] = plan
@@ -531,6 +593,8 @@ def start_level(fresh: bool = False) -> None:
         ss.cards = None
         ss.lesson = call(tutor.micro_lesson, material, ss.concept, ss.level,
                          ss.objective)
+    # The picture is the model's pick from our catalogue, checked by code.
+    ss.figure = figures.valid(ss.concept, (plan or {}).get("figure"))
     ss.card, ss.simpler, ss.try_pick = 0, {}, None
     ss.wrong_this_level = 0
     ss.stage = "lesson"
@@ -572,135 +636,12 @@ def prefetch_question() -> None:
 def add_points(n: int, why: str) -> None:
     """Points: +1 lesson finished, +1 warm-up right, +1/+2/+3 for a correct
     answer at level 1/2/3. Saved in the learner profile."""
-    ss.profile["points"] = ss.profile.get("points", 0) + n
     st.toast(f"⭐ +{n} · {why}")
+    for message in rewards.add_points(ss.profile, n, today()):
+        st.toast(message)       # streak, streak bonus, new level
 
 
 CARD_NAMES = ["You already know", "The new idea", "Worked example", "Your turn"]
-
-
-def lesson_figure(concept: str) -> None:
-    """A small interactive picture for the concept, drawn by our own code
-    (exact numbers - nothing here comes from the model)."""
-    if concept == "state_vector":
-        st.caption("The arrow is the qubit. Try both sliders and watch the "
-                   "numbers below.")
-        theta = st.slider("θ - tilt the arrow away from |0⟩ (degrees)", 0, 180, 60,
-                          key="lf_th",
-                          help="More tilt = more chance of measuring 1. "
-                               "0° is |0⟩, 180° is |1⟩, 90° is half and half.")
-        phi = st.slider("φ - turn the arrow around (degrees)", 0, 359, 0, key="lf_ph",
-                        help="This angle is called the relative phase. It does "
-                             "not change P(0) or P(1) - you meet it later.")
-        st.caption("θ changes the two chances P(0) and P(1). φ only turns the arrow "
-                   "around the vertical line: the chances stay the same.")
-        rho = qv.density_from_state(qv.pure_state(theta, phi))
-        a, b = np.cos(np.radians(theta) / 2), np.sin(np.radians(theta) / 2)
-        st.code(f"|ψ⟩ = {a:.3f}|0⟩ + {b:.3f}·e^(i·{phi}°)|1⟩\n"
-                f"P(0) = {a * a:.3f}    P(1) = {b * b:.3f}    sum = 1", language=None)
-        st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": "|ψ⟩",
-                                         "color": qv.COLOR_A}]), width="stretch")
-    elif concept in ("outer_product", "density_matrix"):
-        st.caption("Pick a state: the matrix is |ψ⟩⟨ψ|. Diagonal = probabilities, "
-                   "off-diagonal = coherence (it carries the phase).")
-        names = list(qv.NAMED_STATES)
-        name = st.selectbox("State", names, index=names.index("|+⟩"), key="lf_state")
-        rho = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES[name]))
-        st.plotly_chart(qv.matrix_figure(rho, f"ρ = |ψ⟩⟨ψ| for {name}"), width="stretch")
-        st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": name,
-                                         "color": qv.COLOR_A}]), width="stretch")
-    elif concept == "mixed_state":
-        st.caption("Slide p: the mixture moves along the straight line between "
-                   "A and B, inside the sphere - purity drops below 1.")
-        p = st.slider("p = probability of |0⟩ (the rest is |+⟩)", 0.0, 1.0, 0.5, 0.05,
-                      key="lf_p")
-        rho_a = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES["|0⟩"]))
-        rho_b = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES["|+⟩"]))
-        rho = qv.mix(p, rho_a, rho_b)
-        st.metric("purity Tr(ρ²)", f"{qv.purity(rho):.3f}")
-        st.plotly_chart(qv.bloch_figure([
-            {"rho": rho_a, "label": "A |0⟩", "color": qv.COLOR_A},
-            {"rho": rho_b, "label": "B |+⟩", "color": qv.COLOR_B},
-            {"rho": rho, "label": "mixture", "color": qv.COLOR_MIX}], chord=True),
-            width="stretch")
-    elif concept == "bloch_sphere":
-        st.caption("θ sets the height (the probabilities), φ turns the arrow "
-                   "around. Shorten the arrow to go inside: a mixed state.")
-        theta = st.slider("θ (tilt from the top, degrees)", 0, 180, 60, key="lf_bth")
-        phi = st.slider("φ (turn around the vertical axis, degrees)", 0, 359, 90,
-                        key="lf_bph")
-        r = st.slider("arrow length |r| (1 = pure)", 0.0, 1.0, 1.0, 0.05, key="lf_br")
-        th, ph = np.radians(theta), np.radians(phi)
-        x, y, z = (r * np.sin(th) * np.cos(ph), r * np.sin(th) * np.sin(ph),
-                   r * np.cos(th))
-        rho = qv.rho_from_bloch(x, y, z)
-        st.code(f"(x, y, z) = ({x + 0:.3f}, {y + 0:.3f}, {z + 0:.3f})\n"
-                f"P(0) = (1 + z)/2 = {(1 + z) / 2:.3f}    "
-                f"purity = {qv.purity(rho):.3f}", language=None)
-        st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": "state",
-                                         "color": qv.COLOR_A}]), width="stretch")
-    elif concept == "single_qubit_gates":
-        st.caption("Pick a start state and a gate. The gate turns the sphere half "
-                   "a turn around the dashed axis.")
-        names = list(qv.NAMED_STATES)
-        name = st.selectbox("Start state", names, index=0, key="lf_gstate")
-        gate = st.radio("Gate", list(qv.GATES), horizontal=True, key="lf_gate")
-        before = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES[name]))
-        after = qv.apply_gate(gate, before)
-        bx, by, bz = qv.bloch_vector(before) + 0.0
-        ax, ay, az = qv.bloch_vector(after) + 0.0
-        st.code(f"before: ({bx:.2f}, {by:.2f}, {bz:.2f})   P(0) = {(1 + bz) / 2:.2f}\n"
-                f"after {gate}: ({ax:.2f}, {ay:.2f}, {az:.2f})   "
-                f"P(0) = {(1 + az) / 2:.2f}", language=None)
-        st.plotly_chart(qv.bloch_figure([
-            {"rho": before, "label": f"before {name}", "color": qv.COLOR_A},
-            {"rho": after, "label": f"after {gate}", "color": qv.COLOR_B}],
-            axis=qv.GATE_AXES[gate]), width="stretch")
-
-
-def simple_picture(concept: str, key: str) -> None:
-    """A plain picture of the idea, drawn by our own code - shown when the
-    learner says "I didn't get it". No model output in here."""
-    if concept == "state_vector":
-        theta = st.slider("Turn the arrow", 0, 180, 60, key=f"sp_{key}")
-        st.plotly_chart(qv.arrow_figure(theta), width="stretch", key=f"spa_{key}")
-        st.plotly_chart(qv.chance_bar(float(np.cos(np.radians(theta) / 2) ** 2)),
-                        width="stretch", key=f"spb_{key}")
-        st.caption("The arrow always has length 1. Its two shadows are a and b. "
-                   "Square each shadow → the two chances. They always fill the bar.")
-    elif concept in ("outer_product", "density_matrix"):
-        theta = st.slider("Change the state", 0, 180, 90, key=f"sp_{key}")
-        st.plotly_chart(qv.product_table_figure(theta), width="stretch",
-                        key=f"spa_{key}")
-        st.caption("A multiplication table: every entry of the column times every "
-                   "entry of the row. The diagonal (a·a, b·b) holds the two chances.")
-    elif concept == "mixed_state":
-        p = st.slider("Share of |0⟩ in the mix", 0.0, 1.0, 0.5, 0.05, key=f"sp_{key}")
-        rho_a = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES["|0⟩"]))
-        rho_b = qv.density_from_state(qv.pure_state(*qv.NAMED_STATES["|+⟩"]))
-        st.plotly_chart(qv.bloch_figure([
-            {"rho": rho_a, "label": "A |0⟩", "color": qv.COLOR_A},
-            {"rho": rho_b, "label": "B |+⟩", "color": qv.COLOR_B},
-            {"rho": qv.mix(p, rho_a, rho_b), "label": "mixture",
-             "color": qv.COLOR_MIX}], chord=True), width="stretch", key=f"spa_{key}")
-        st.caption("A mixture sits on the straight line between A and B - inside "
-                   "the ball, not on its surface.")
-    elif concept == "bloch_sphere":
-        theta = st.slider("Tilt the arrow", 0, 180, 60, key=f"sp_{key}")
-        st.plotly_chart(qv.height_figure(theta), width="stretch", key=f"spa_{key}")
-        st.plotly_chart(qv.chance_bar((1 + float(np.cos(np.radians(theta)))) / 2),
-                        width="stretch", key=f"spb_{key}")
-        st.caption("The sphere seen from the side. Only the height of the arrow tip "
-                   "decides the chances: top = always 0, bottom = always 1, "
-                   "middle = half and half.")
-    elif concept == "single_qubit_gates":
-        gate = st.radio("Gate", list(qv.GATES), horizontal=True, key=f"spg_{key}")
-        angle = st.slider("Start arrow (degrees from |0⟩)", 0, 359, 30, key=f"sp_{key}")
-        st.plotly_chart(qv.gate_slice_figure(gate, angle), width="stretch",
-                        key=f"spa_{key}")
-        st.caption("The sphere seen from the side. In this flat cut each gate works "
-                   "like a mirror on the dashed line (in 3D: half a turn around "
-                   "that line). An arrow lying on the line does not move.")
 
 
 def explain_again(text: str) -> None:
@@ -708,8 +649,8 @@ def explain_again(text: str) -> None:
     i = ss.card
     if ss.simpler.get(i):
         with st.container(border=True):
-            if ss.concept in curriculum.BY_ID and i != 1:   # card 2 has its figure
-                simple_picture(ss.concept, f"{ss.level}_{i}")
+            if ss.get("figure") and i != 1:      # card 2 already shows it
+                figures.show(ss.concept, ss.figure, f"again{i}")
             st.write(ss.simpler[i])
     elif st.button("🤔 I didn't get it - show me", key=f"simpler_{i}"):
         with st.spinner("Finding a simpler way…"):
@@ -728,14 +669,14 @@ def lesson_cards_view() -> None:
         explain_again(cards["bridge"])
     elif i == 1:
         st.markdown(f"#### 💡 {CARD_NAMES[1]}")
-        has_figure = ss.concept in curriculum.BY_ID
+        has_figure = bool(ss.get("figure"))
         left, right = st.columns([1, 1]) if has_figure else (st.container(), None)
         with left:
             st.code(cards["idea"], language=None, wrap_lines=True)
             explain_again(cards["idea"])
         if has_figure:
             with right:
-                lesson_figure(ss.concept)
+                figures.show(ss.concept, ss.figure, "idea")
     elif i == 2:
         st.markdown(f"#### ✏️ {CARD_NAMES[2]}")
         for n, step in enumerate(cards["example"], 1):
@@ -1143,18 +1084,43 @@ with tab_study:
 
 # ================================================================ PROFILE
 with tab_profile:
-    st.subheader("Your learner profile")
-    if ss.get("user_id"):
-        me = ss.profile.setdefault("learner", {})
-        new_name = st.text_input("Your name in the app", me.get("name", ""),
-                                 max_chars=30).strip()
-        if new_name != me.get("name", ""):
-            me["name"] = new_name
-            st.rerun()
-        st.caption(f"Account: {ss.user_email}")
-    st.metric("⭐ Points", ss.profile.get("points", 0),
+    me = ss.profile.setdefault("learner", {})
+    points = ss.profile.get("points", 0)
+    lvl, run = rewards.level(points), rewards.streak(ss.profile, today())
+    st.subheader(f"{lvl['badge']} {display_name(me) or 'Your profile'}")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Level", lvl["name"])
+    c2.metric("⭐ Points", points,
               help="+1 for finishing a lesson, +1 for a right warm-up, "
-                   "+1 / +2 / +3 for a correct answer at level 1 / 2 / 3.")
+                   "+1 / +2 / +3 for a correct answer at level 1 / 2 / 3, "
+                   "plus streak bonuses.")
+    c3.metric("🔥 Days in a row", run,
+              help="A day counts when you earn at least one point. Every 7 days "
+                   "in a row bring a bonus: 7 days +10, 14 days +20, 21 days +30 …")
+    if lvl["next_at"]:
+        st.progress(lvl["progress"], text=f"{lvl['next_at'] - points} points to "
+                                          f"the next level: {lvl['next_name']}")
+    else:
+        st.progress(1.0, text="Top level reached.")
+    st.markdown("**Badges**  \n" + " · ".join(
+        f"{b['badge']} {b['name']}" if b["earned"] else f":gray[🔒 {b['name']} ({b['how']})]"
+        for b in rewards.badges(ss.profile)))
+
+    if ss.get("user_id"):
+        with st.expander("✏️ Edit my name"):
+            with st.form("profile_form", border=False):
+                f1, f2, f3 = st.columns(3)
+                first = f1.text_input("First name", me.get("first", ""), max_chars=30)
+                last = f2.text_input("Last name", me.get("last", ""), max_chars=30)
+                nick = f3.text_input("Nickname (shown in the app)",
+                                     me.get("nick") or me.get("name", ""), max_chars=30)
+                if st.form_submit_button("Save", type="primary"):
+                    me.update(first=first.strip(), last=last.strip(), nick=nick.strip())
+                    me.pop("name", None)
+                    st.rerun()
+            st.caption(f"Account e-mail: {ss.user_email}")
+
+    st.subheader("Your learner profile")
     where = ("It is saved to your account after every step, so you can continue "
              "on any device." if ss.get("user_id") else
              "It lives only in this browser session; download it to keep it, "
@@ -1201,4 +1167,3 @@ with tab_profile:
 
 save_resume()
 autosave()
-sync_cookies()

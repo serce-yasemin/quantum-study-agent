@@ -38,8 +38,14 @@ re-reading the text.
 - **Answering is easy** — a question with parts (a), (b), (c) gets one box per
   part. No special symbols needed: a plain keyboard (psi, sqrt(2), <phi|psi>)
   is accepted, and a small ➕ picker adds ψ, φ, √ … for you.
-- **Points** — +1 for finishing a lesson, +1 for a right warm-up, and
-  +1 / +2 / +3 for a correct answer at level 1 / 2 / 3.
+- **Points, levels, badges, streak** — +1 for finishing a lesson, +1 for a
+  right warm-up, +1 / +2 / +3 for a correct answer at level 1 / 2 / 3. Points
+  add up to named levels (Curious → Qubit Rookie → … → Quantum Navigator), each
+  with a badge. Days in a row with at least one point make a streak; every 7
+  days in a row bring bonus points (7 days +10, 14 days +20, …).
+- **The picture belongs to the lesson** — each concept has a small catalogue
+  of pictures drawn by our own code. The model never draws: it only picks the
+  one that fits the idea it teaches (or none), and code checks the pick.
 - **Study as long as you like** — there is no question limit. *Finish for
   today* is always there; when you press it you choose between carrying on
   and getting homework. Two misses at a level send you back to the lesson
@@ -205,6 +211,8 @@ checked without typing. It uses the real API and saves to a separate
 |---|---|
 | `streamlit_app.py` | Web app: Explore / Study / My progress tabs |
 | `quantum_viz.py` | Exact qubit math + Bloch sphere and heat-map figures |
+| `figures.py` | Catalogue of lesson pictures the model may pick from |
+| `rewards.py` | Points → levels, badges, daily streak and streak bonus |
 | `store.py` | Learner accounts (Supabase Auth) and saving the profile |
 | `homework.py` | Builds the end-of-session assignment and saves it to the profile |
 | `resources.py` | Checked book sections, Tavily search on trusted sites, link checking |
