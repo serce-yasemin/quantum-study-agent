@@ -140,25 +140,42 @@ cookie_bridge()
 
 
 # ---------------------------------------------------------------- access gate
-def gate_hash() -> str:
-    """What the gate cookie holds: a fingerprint of the code, never the code."""
-    return hashlib.sha256(f"qsa-gate:{ACCESS_CODE}".encode()).hexdigest()
+def _secret(name: str) -> str | None:
+    try:
+        return st.secrets.get(name) or None
+    except Exception:
+        return None
+
+
+# A second code only for the hackathon judges: it can be switched off on its
+# own (delete JUDGE_ACCESS_CODE in the Secrets) without changing the main code.
+JUDGE_ACCESS_CODE = _secret("JUDGE_ACCESS_CODE")
+
+
+def gate_hash(code: str | None = None) -> str:
+    """What the cookie stores instead of the code itself."""
+    return hashlib.sha256(f"qsa-gate:{code or ACCESS_CODE}".encode()).hexdigest()
+
+
+def valid_codes() -> list[str]:
+    return [c for c in (ACCESS_CODE, JUDGE_ACCESS_CODE) if c]
 
 
 def access_gate() -> None:
     """Protect the shared API credits on the public demo."""
     if not ACCESS_CODE or ss.get("unlocked"):
         return
-    if cookie(GATE_COOKIE) == gate_hash():      # this device entered it before
-        ss.unlocked = True
+    if cookie(GATE_COOKIE) in {gate_hash(c) for c in valid_codes()}:
+        ss.unlocked = True                     # this device entered a code before
         return
     st.title("⚛️ Quantum Study Agent")
     code = st.text_input("Access code", type="password",
-                         help="The code is in the hackathon submission text.")
+                         help="The code is in the hackathon submission's testing "
+                              "instructions.")
     if code:
-        if code == ACCESS_CODE:
+        if code in valid_codes():
             ss.unlocked = True
-            want_cookie(GATE_COOKIE, gate_hash())
+            want_cookie(GATE_COOKIE, gate_hash(code))
             st.rerun()
         st.error("Wrong code.")
     stop()
@@ -563,13 +580,62 @@ def show_assignment(a: dict) -> None:
                    "check questions about it.")
 
 
+# Credit protection: every learner account may start this many model calls a
+# day (lessons, questions, grading, homework; background writing included).
+# Change it with DAILY_CALL_LIMIT in the Secrets.
+try:
+    DAILY_CALL_LIMIT = int(_secret("DAILY_CALL_LIMIT") or 200)
+except ValueError:
+    DAILY_CALL_LIMIT = 200
+
+
+def use_call() -> bool:
+    """Count one model call for today; False once today's limit is reached."""
+    profile = ss.get("profile")
+    if profile is None:
+        return True
+    usage = profile.setdefault("usage", {})
+    if usage.get("date") != str(today()):
+        usage.update(date=str(today()), calls=0)
+    if usage["calls"] >= DAILY_CALL_LIMIT:
+        return False
+    usage["calls"] += 1
+    return True
+
+
+LIMIT_TEXT = ("You have reached today's limit of AI steps for this account (it "
+              "protects the project's shared model credits). Everything in the "
+              "🔭 Explore tab still works - and the AI tutor is back tomorrow.")
+
+
+def friendly_error(exc: Exception) -> str:
+    """Say what went wrong in words a learner can act on."""
+    text = f"{type(exc).__name__} {exc}".lower()
+    status = getattr(exc, "status_code", None)
+    if status == 402 or any(w in text for w in ("insufficient", "balance", "credit",
+                                                 "quota", "billing", "payment")):
+        return ("The AI tutor is paused: the project's model credits have run out. "
+                "The 🔭 Explore tab still works, and the demo video in the README "
+                "shows the tutor in action.")
+    if status == 429 or "rate limit" in text or "too many requests" in text:
+        return "The AI model is busy right now. Please try again in a minute."
+    if status in (401, 403):
+        return "The AI model refused the request (access key problem)."
+    if "timeout" in text or "timed out" in text or "connection" in text:
+        return "The AI model did not answer in time. Please try again."
+    return f"The model call failed: {exc}"
+
+
 def call(fn, *args, label: str = "Nemotron is thinking…"):
     """Run an LLM step with a spinner; show a friendly error instead of a trace."""
+    if not use_call():
+        st.warning(LIMIT_TEXT)
+        st.stop()
     try:
         with st.spinner(label):
             return fn(*args)
     except Exception as exc:
-        st.error(f"The model call failed: {exc}")
+        st.error(friendly_error(exc))
         st.stop()
 
 
@@ -612,6 +678,8 @@ def prefetch_lesson(concept: str, level: int, fresh: bool = False) -> None:
         return                                  # one background lesson at a time
     if running and running["key"] == key and running["box"].get("plan"):
         return                                  # written, waiting to be collected
+    if not use_call():
+        return
     box: dict = {}
     options = figures.options(concept)
 
@@ -727,6 +795,8 @@ def prefetch_question() -> None:
     """Start writing the next question in a background thread, so it is ready
     (or nearly ready) when the learner asks for it. The thread only talks to
     the model - it never touches the page."""
+    if not use_call():
+        return                      # today's limit: the normal call will say so
     args = (ss.material, ss.concept, ss.level, weak_points(), list(ss.asked),
             ss.objective)
     box: dict = {}
@@ -917,6 +987,9 @@ def run_action(action: str, data: dict) -> None:
 
 
 def make_homework() -> None:
+    if not use_call():
+        ss.homework, ss.homework_error = {}, LIMIT_TEXT
+        return
     try:
         with st.spinner("Preparing your homework (checking every link)…"):
             ss.homework = homework.create(ss.profile, ss.concept,
@@ -924,7 +997,7 @@ def make_homework() -> None:
                                           ss.material, ss.session_weak)
     except Exception as exc:
         ss.homework = {}
-        ss.homework_error = str(exc)
+        ss.homework_error = friendly_error(exc)
 
 
 def homework_gate() -> None:
@@ -1273,8 +1346,9 @@ with tab_study:
                         ask_homework_gate("homework")
                     make_homework()
                     st.rerun()
-            if ss.pop("homework_error", None):
-                st.warning("Could not prepare homework this time.")
+            if ss.get("homework_error"):
+                st.warning("Could not prepare homework this time. "
+                           + ss.pop("homework_error"))
             if ss.get("homework_skipped") and ss.homework == {}:
                 st.info("No new homework this time - your open homework is waiting at "
                         "the top of the Study tab.")

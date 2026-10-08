@@ -3,6 +3,14 @@
 A personal, stateful study agent for learning quantum computing.
 Nebius x NVIDIA Global AI Hackathon 2026 — **Personal AI track**.
 
+**Live app:** https://quantum-study-agent.streamlit.app
+
+> **For judges:** the access code and a demo account are in the submission's
+> testing instructions. The 🔭 Explore tab is computed by the app itself and
+> always works. The AI tutor (📘 Study) runs on shared model credits; if they
+> ever run out, the app says so politely and the demo video shows the tutor
+> in action.
+
 ## The problem
 
 Asking a chatbot to "quiz me" gives you a one-off quiz and then forgets you.
@@ -186,7 +194,16 @@ part of a URL. In Supabase → Authentication:
 `TAVILY_API_KEY` is optional: without it, homework uses the book list only.
 
 The access code keeps strangers from spending the API credits on the public
-demo. Locally, without secrets, the app opens directly.
+demo. Locally, without secrets, the app opens directly. Optional secrets:
+
+- `JUDGE_ACCESS_CODE` — a second code (for the hackathon judges) that can be
+  switched off on its own.
+- `DAILY_CALL_LIMIT` — model calls each account may start per day (default
+  200; a full study session uses roughly 25-40). When it is reached, the
+  tutor says so and the Explore tab keeps working.
+
+If the model credits run out, the app shows a plain message instead of an
+error trace.
 
 ## Run in the terminal
 
