@@ -17,6 +17,12 @@ re-reading the text.
   with a slider and watch the mixture move along the straight line between
   them, inside the sphere, while the coherence and purity drop live. These
   numbers are computed exactly (numpy), not by the AI.
+- **Hands-on labs** — the Explore tab also has a gate circuit (up to four
+  gates, the state followed step by step on the sphere, and what the whole
+  circuit amounts to: H·Z·H = X), a measurement lab (measure 1, 10 or 100
+  times and watch the counts approach the predicted probabilities, in the
+  Z, X or Y basis), a two-qubit correlation lab (Bell states agree in both
+  bases, product states do not) and a step-by-step Bell-state builder.
 - **A learning path that starts from the basics** — state vectors → outer
   products → pure-state density matrices → mixed states → the Bloch sphere →
   single-qubit gates (X, Z, H) → measuring in other bases → two qubits and
@@ -217,6 +223,8 @@ checked without typing. It uses the real API and saves to a separate
 | File | Role |
 |---|---|
 | `streamlit_app.py` | Web app: Explore / Study / My progress tabs |
+| `labs.py` | Explore-tab labs: gate circuit, measurement, two-qubit correlations |
+| `ui.py` | Card grids that wrap to the window width (readable on a phone) |
 | `quantum_viz.py` | Exact qubit math + Bloch sphere and heat-map figures |
 | `figures.py` | Catalogue of lesson pictures the model may pick from |
 | `rewards.py` | Points → levels, badges, daily streak and streak bonus |

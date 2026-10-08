@@ -43,6 +43,8 @@ except Exception:            # no secrets file when running locally
 
 import curriculum  # noqa: E402  (after env setup)
 import figures  # noqa: E402
+import labs  # noqa: E402
+import ui  # noqa: E402
 import homework  # noqa: E402
 import profile_store  # noqa: E402
 import rewards  # noqa: E402
@@ -422,6 +424,7 @@ if ss.get("user_id"):
         st.info(f"▶️ Welcome back - **{concept_title(ss.concept)}** is waiting where "
                 "you stopped, in the 📘 **Study** tab.")
 
+ui.css()
 TABS = ["🔭 Explore", "📘 Study", "🗂️ My progress"]
 try:      # open on Study when a lesson or question is waiting there
     tab_explore, tab_study, tab_profile = st.tabs(
@@ -445,19 +448,22 @@ def state_picker(label: str, key: str, default: str):
 
 def show_numbers(rho: np.ndarray) -> None:
     r = qv.bloch_vector(rho)
-    c = st.columns(5)
-    c[0].metric("P(0) = ρ₀₀", f"{rho[0, 0].real:.3f}")
-    c[1].metric("P(1) = ρ₁₁", f"{rho[1, 1].real:.3f}")
-    c[2].metric("coherence |ρ₀₁|", f"{abs(rho[0, 1]):.3f}")
     phase = "—" if abs(rho[0, 1]) < 1e-9 else f"{np.degrees(-np.angle(rho[0, 1])) % 360:.1f}°"
-    c[3].metric("relative phase φ", phase)
-    c[4].metric("purity Tr(ρ²)", f"{qv.purity(rho):.3f}",
-                help=f"Bloch vector length |r| = {np.linalg.norm(r):.3f}")
+    ui.stats([("P(0) = ρ₀₀", f"{rho[0, 0].real:.3f}"),
+              ("P(1) = ρ₁₁", f"{rho[1, 1].real:.3f}"),
+              ("coherence |ρ₀₁|", f"{abs(rho[0, 1]):.3f}"),
+              ("relative phase φ", phase),
+              ("purity Tr(ρ²)", f"{qv.purity(rho):.3f}",
+               f"arrow length |r| = {np.linalg.norm(r):.3f}")])
 
+
+LABS = ["One pure state", "Mix two states", "Gate circuit", "Measurement lab",
+        "Two qubits: correlations", "Making entanglement"]
 
 with tab_explore:
-    mode = st.radio("What do you want to see?",
-                    ["One pure state", "Mix two states"], horizontal=True)
+    st.caption("Play with the ideas from the lessons. Everything here is computed "
+               "exactly by the app - no AI, no waiting.")
+    mode = st.radio("What do you want to try?", LABS, horizontal=True)
 
     if mode == "One pure state":
         left, right = st.columns([1, 2])
@@ -474,6 +480,14 @@ with tab_explore:
         st.plotly_chart(qv.matrix_figure(rho, f"ρ = |ψ⟩⟨ψ| for {name}"),
                         width="stretch")
 
+    elif mode == "Gate circuit":
+        labs.circuit_lab()
+    elif mode == "Measurement lab":
+        labs.measure_lab()
+    elif mode == "Two qubits: correlations":
+        labs.pair_lab()
+    elif mode == "Making entanglement":
+        labs.pair_parts_lab()
     else:
         left, right = st.columns([1, 2])
         with left:
@@ -491,13 +505,14 @@ with tab_explore:
                 {"rho": rho, "label": "mixture", "color": qv.COLOR_MIX},
             ], chord=True), width="stretch")
         show_numbers(rho)
-        c1, c2, c3 = st.columns(3)
-        c1.plotly_chart(qv.matrix_figure(rho_a, f"A: {name_a}", show_scale=False),
-                        width="stretch")
-        c2.plotly_chart(qv.matrix_figure(rho_b, f"B: {name_b}", show_scale=False),
-                        width="stretch")
-        c3.plotly_chart(qv.matrix_figure(rho, f"Mixture (p = {p:.2f})"),
-                        width="stretch")
+        with st.expander("The three density matrices"):
+            st.plotly_chart(qv.matrix_figure(rho, f"Mixture (p = {p:.2f})"),
+                            width="stretch")
+            c1, c2 = st.columns(2)
+            c1.plotly_chart(qv.matrix_figure(rho_a, f"A: {name_a}", show_scale=False),
+                            width="stretch")
+            c2.plotly_chart(qv.matrix_figure(rho_b, f"B: {name_b}", show_scale=False),
+                            width="stretch")
 
 
 # ================================================================ STUDY
@@ -512,16 +527,20 @@ LABELS = {"locked": "locked", "new": "not started", "learning": "in progress",
           "review_due": "review due", "mastered": "mastered"}
 
 
-def path_overview() -> None:
-    """The learning path as a row of cards: basics first, each unlocks the next."""
-    cols = st.columns(len(curriculum.PATH))
-    for i, (col, step) in enumerate(zip(cols, curriculum.PATH)):
+def path_overview(recommended: str | None = None) -> None:
+    """The learning path as cards that wrap to the window width: basics
+    first, each step unlocks the next. The recommended step is framed."""
+    items = []
+    for i, step in enumerate(curriculum.PATH):
         state = curriculum.status(ss.profile, step["id"])
         rec = ss.profile["concepts"].get(step["id"])
         level = rec["level"] if rec else 0
-        with col.container(border=True):
-            st.markdown(f"**{i + 1}. {step['title']}**")
-            st.caption(f"{ICONS[state]} {LABELS[state]} · level {level}/3")
+        items.append({"top": f"step {i + 1}", "title": step["title"],
+                      "bar": (level, 3),
+                      "sub": f"{ICONS[state]} {LABELS[state]} · level {level}/3",
+                      "highlight": step["id"] == recommended,
+                      "dim": state == "locked"})
+    ui.cards(items, min_px=165)
 
 
 def show_assignment(a: dict) -> None:
@@ -967,8 +986,8 @@ with tab_study:
                  f"**{NEED} correct answers in a row**. Study as long as you like - "
                  "press *Finish for today* whenever you want to stop.")
         st.markdown("#### Your learning path")
-        path_overview()
         rec_id, reason = curriculum.recommend(ss.profile)
+        path_overview(rec_id)
         st.info(f"**Recommended now:** {curriculum.BY_ID[rec_id]['title']} - {reason}.")
         # Start writing that lesson now, while the learner reads this page.
         collect_lesson()
@@ -1176,23 +1195,19 @@ with tab_profile:
     points = ss.profile.get("points", 0)
     lvl, run = rewards.level(points), rewards.streak(ss.profile, today())
     st.subheader(f"{lvl['badge']} {display_name(me) or 'Your profile'}")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Level", lvl["name"])
-    c2.metric("⭐ Points", points,
-              help="+1 for finishing a lesson, +1 for a right warm-up, "
-                   "+1 / +2 / +3 for a correct answer at level 1 / 2 / 3, "
-                   "plus streak bonuses.")
-    c3.metric("🔥 Days in a row", run,
-              help="A day counts when you earn at least one point. Every 7 days "
-                   "in a row bring a bonus: 7 days +10, 14 days +20, 21 days +30 …")
+    ui.stats([("level", f"{lvl['badge']} {lvl['name']}"),
+              ("⭐ points", points, "lesson +1 · warm-up +1 · answer +1/+2/+3"),
+              ("🔥 days in a row", run, "bonus every 7 days: +10, +20, +30 …")],
+             min_px=170)
     if lvl["next_at"]:
         st.progress(lvl["progress"], text=f"{lvl['next_at'] - points} points to "
                                           f"the next level: {lvl['next_name']}")
     else:
         st.progress(1.0, text="Top level reached.")
-    st.markdown("**Badges**  \n" + " · ".join(
-        f"{b['badge']} {b['name']}" if b["earned"] else f":gray[🔒 {b['name']} ({b['how']})]"
-        for b in rewards.badges(ss.profile)))
+    st.markdown("**Badges**")
+    ui.cards([{"title": f"{b['badge']} {b['name']}" if b["earned"] else f"🔒 {b['name']}",
+               "sub": "earned" if b["earned"] else b["how"], "dim": not b["earned"]}
+              for b in rewards.badges(ss.profile)], min_px=150)
 
     if ss.get("user_id"):
         with st.expander("✏️ Edit my name"):
@@ -1224,20 +1239,21 @@ with tab_profile:
     concepts = ss.profile["concepts"]
     order = [s["id"] for s in curriculum.PATH]
     if concepts:
+        items = []
         for name, rec in sorted(concepts.items(),
                                 key=lambda kv: order.index(kv[0]) if kv[0] in order
                                 else len(order)):
             total = len(rec["history"])
             right = sum(h["correct"] for h in rec["history"])
-            cols = st.columns(4)
             title = curriculum.BY_ID[name]["title"] if name in curriculum.BY_ID else name
-            cols[0].metric("Concept", title)
-            cols[1].metric("Level passed", f"{rec['level']}/3")
-            cols[2].metric("Answers correct", f"{right}/{total}")
-            cols[3].metric("Next review", rec["next_review"] or "—")
             weak = [h["weak_point"] for h in rec["history"] if h["weak_point"]]
+            sub = (f"answers correct {right}/{total} · next review "
+                   f"{rec['next_review'] or '—'}")
             if weak:
-                st.caption("Gaps found so far: " + "; ".join(dict.fromkeys(weak)))
+                sub += " · gaps: " + "; ".join(dict.fromkeys(weak))
+            items.append({"top": f"level {rec['level']}/3", "title": title,
+                          "bar": (rec["level"], 3), "sub": sub})
+        ui.cards(items, min_px=260)
     else:
         st.caption("No sessions yet.")
 

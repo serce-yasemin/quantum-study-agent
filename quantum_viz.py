@@ -557,3 +557,30 @@ def amplitude_bars(before, after=None, names: tuple = ("before", "after"),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=TEXT))
     return fig
+
+
+def counts_figure(labels: list[str], counts, predicted) -> go.Figure:
+    """Measured share of each outcome (bars) next to the predicted
+    probability (a marker line on each bar)."""
+    counts = np.asarray(counts, dtype=float)
+    total = counts.sum()
+    share = counts / total if total else np.zeros_like(counts)
+    fig = go.Figure(go.Bar(
+        x=labels, y=share, name="measured", marker=dict(color=COLOR_A),
+        text=[f"{int(c)}" if c else "" for c in counts], textposition="inside",
+        insidetextanchor="end", textfont=dict(color="#ffffff"),
+        hovertemplate="%{x}: %{y:.1%} of the measurements<extra></extra>"))
+    fig.add_trace(go.Scatter(
+        x=labels, y=list(predicted), mode="markers", name="predicted",
+        marker=dict(symbol="line-ew", size=46, color=COLOR_B,
+                    line=dict(width=4, color=COLOR_B)),
+        hovertemplate="%{x}: predicted %{y:.1%}<extra></extra>"))
+    fig.update_layout(
+        height=280, margin=dict(l=10, r=10, t=30, b=10),
+        legend=dict(orientation="h", y=1.18, x=0),
+        yaxis=dict(range=[0, 1.12], tickformat=".0%", gridcolor=GRID,
+                   fixedrange=True, title=dict(text="share of measurements")),
+        xaxis=dict(fixedrange=True, type="category"),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT))
+    return fig

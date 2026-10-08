@@ -161,7 +161,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
         length = float(np.hypot(x, y))
         st.code(f"length = √({x:g}² + {y:g}²) = {length:.3f}\n"
                 f"divide both entries by it → [{x / length:.3f}; {y / length:.3f}]",
-                language=None)
+                language=None, wrap_lines=True)
         st.caption("Grey: the vector you start with. Blue: the same direction, "
                    "shrunk or stretched until it touches the dotted circle "
                    "(length 1). Only a length-1 vector is a qubit state.")
@@ -171,7 +171,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
         a = float(np.cos(np.radians(theta) / 2))
         b = float(np.sin(np.radians(theta) / 2))
         st.code(f"inner product = a·(−b) + b·a = {a:.2f}·({-b:.2f}) + {b:.2f}·{a:.2f} = 0",
-                language=None)
+                language=None, wrap_lines=True)
         st.caption("Swap the two entries and flip one sign: the partner arrow "
                    "always stands at a right angle to |ψ⟩. Right angle = inner "
                    "product 0 = orthogonal. (With complex entries you also take "
@@ -184,7 +184,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
                         help="The relative phase. It does not change P(0) or P(1).")
         a, b = np.cos(np.radians(theta) / 2), np.sin(np.radians(theta) / 2)
         st.code(f"|ψ⟩ = {a:.3f}|0⟩ + {b:.3f}·e^(i·{phi}°)|1⟩\n"
-                f"P(0) = {a * a:.3f}    P(1) = {b * b:.3f}", language=None)
+                f"P(0) = {a * a:.3f}    P(1) = {b * b:.3f}", language=None, wrap_lines=True)
         rho = qv.density_from_state(qv.pure_state(theta, phi))
         st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": "|ψ⟩",
                                          "color": qv.COLOR_A}]), key=f"{k}_a", **chart)
@@ -230,7 +230,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
         rho = qv.rho_from_bloch(x, y, z)
         st.code(f"(x, y, z) = ({x + 0:.3f}, {y + 0:.3f}, {z + 0:.3f})\n"
                 f"P(0) = (1 + z)/2 = {(1 + z) / 2:.3f}    "
-                f"purity = {qv.purity(rho):.3f}", language=None)
+                f"purity = {qv.purity(rho):.3f}", language=None, wrap_lines=True)
         st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": "state",
                                          "color": qv.COLOR_A}]), key=f"{k}_a", **chart)
         st.caption("θ sets the height (the probabilities), φ turns the arrow "
@@ -253,7 +253,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
         ax, ay, az = qv.bloch_vector(after) + 0.0
         st.code(f"before: ({bx:.2f}, {by:.2f}, {bz:.2f})   P(0) = {(1 + bz) / 2:.2f}\n"
                 f"after {gate}: ({ax:.2f}, {ay:.2f}, {az:.2f})   "
-                f"P(0) = {(1 + az) / 2:.2f}", language=None)
+                f"P(0) = {(1 + az) / 2:.2f}", language=None, wrap_lines=True)
         st.plotly_chart(qv.bloch_figure([
             {"rho": before, "label": f"before {name}", "color": qv.COLOR_A},
             {"rho": after, "label": f"after {gate}", "color": qv.COLOR_B}],
@@ -278,7 +278,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
         p0 = qv.basis_probability(rho, axis)
         st.code(f"Bloch vector r = ({x:.2f}, {y:.2f}, {z:.2f})\n"
                 f"P({names[0]}) = (1 + r·n)/2 = {p0:.2f}    "
-                f"P({names[1]}) = {1 - p0:.2f}", language=None)
+                f"P({names[1]}) = {1 - p0:.2f}", language=None, wrap_lines=True)
         st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": "|ψ⟩",
                                          "color": qv.COLOR_A}], axis=axis,
                                         axis_label="measurement axis"),
@@ -295,7 +295,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
         st.plotly_chart(qv.shadow_figure(state, axis), key=f"{k}_a", **chart)
         st.code(f"shadow r·n = {d + 0:.2f}\n"
                 f"P(b₀) = (1 + {d + 0:.2f})/2 = {(1 + d) / 2:.2f}    "
-                f"P(b₁) = {(1 - d) / 2:.2f}", language=None)
+                f"P(b₁) = {(1 - d) / 2:.2f}", language=None, wrap_lines=True)
         st.plotly_chart(qv.chance_bar((1 + d) / 2, ("b₀", "b₁")), key=f"{k}_c", **chart)
         st.caption("The thick line is the shadow of the arrow on the dashed "
                    "measurement axis. Long shadow toward b₀ → b₀ is almost "
@@ -313,7 +313,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
                         key=f"{k}_a", **chart)
         out = [x * y for x in first for y in second]
         st.code("read the table row by row:\n[" + "; ".join(f"{v + 0:g}" for v in out)
-                + "]   (order 00, 01, 10, 11)", language=None)
+                + "]   (order 00, 01, 10, 11)", language=None, wrap_lines=True)
         st.caption("Each entry of the first vector multiplies the whole second "
                    "vector. Reading the table row by row gives the four entries "
                    "of the two-qubit state.")
@@ -344,7 +344,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
         st.plotly_chart(qv.amplitude_bars(state), key=f"{k}_a", **chart)
         st.code(f"p·s = {p * s_ + 0:.2f}    q·r = {q * r + 0:.2f}    →  "
                 + ("equal: a product state" if gap < 1e-9 else "not equal: entangled"),
-                language=None)
+                language=None, wrap_lines=True)
         st.caption("H spreads the first qubit over 0 and 1 - still a product "
                    "state. CNOT then ties the second qubit to the first: only "
                    "two boxes are left, and the state is entangled.")
@@ -357,7 +357,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
             st.plotly_chart(qv.amplitude_bars(state, squared=True), key=f"{k}_a", **chart)
             st.code(f"state = {c:.2f}|00⟩ + {s_:.2f}|11⟩\n"
                     f"p·s − q·r = {c * s_:.2f}   (0 = product state, 0.5 = Bell state)",
-                    language=None)
+                    language=None, wrap_lines=True)
             st.caption("The two results always agree. At 0° or 90° there is "
                        "nothing to correlate (a product state); at 45° the state "
                        "is a Bell state - as entangled as two qubits can be.")
@@ -365,7 +365,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
             rho = qv.reduced_a(state)
             st.code(f"state = {c:.2f}|00⟩ + {s_:.2f}|11⟩\n"
                     f"ρ_A = [[{c * c:.2f}, 0], [0, {s_ * s_:.2f}]]    "
-                    f"purity Tr(ρ_A²) = {qv.purity(rho):.3f}", language=None)
+                    f"purity Tr(ρ_A²) = {qv.purity(rho):.3f}", language=None, wrap_lines=True)
             st.plotly_chart(qv.bloch_figure([{"rho": rho, "label": "qubit A alone",
                                              "color": qv.COLOR_MIX}]),
                             key=f"{k}_a", **chart)
@@ -379,7 +379,7 @@ def show(concept: str, key: str, k: str, numbers: list[float] | None = None) -> 
         p, q, r, s_ = [float(v) for v in qv.STATES2[name]]
         rho = qv.reduced_a(qv.STATES2[name])
         st.code(f"M = [[{p:.3f}, {q:.3f}],     rows: qubit A\n"
-                f"     [{r:.3f}, {s_:.3f}]]     columns: qubit B", language=None)
+                f"     [{r:.3f}, {s_:.3f}]]     columns: qubit B", language=None, wrap_lines=True)
         st.plotly_chart(qv.matrix_figure(rho, "ρ_A = M·M†"), key=f"{k}_a", **chart)
         st.metric("purity Tr(ρ_A²)", f"{qv.purity(rho):.3f}")
         st.caption("Each entry of ρ_A is one row of M times another row of M. "
