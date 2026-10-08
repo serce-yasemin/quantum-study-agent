@@ -592,7 +592,7 @@ def lesson_key(concept: str, level: int, material: str) -> str:
     return f"{concept}:{level}:v4:{hashlib.sha256(material.encode()).hexdigest()[:8]}"
 
 
-def prefetch_lesson(concept: str, level: int) -> None:
+def prefetch_lesson(concept: str, level: int, fresh: bool = False) -> None:
     """Write a lesson the learner will probably open next (the recommended
     step, or the next level) in a background thread, so the click itself has
     nothing left to wait for. One at a time; never for a lesson already saved."""
@@ -600,9 +600,14 @@ def prefetch_lesson(concept: str, level: int) -> None:
         return
     material = curriculum.material(concept)
     key = lesson_key(concept, level, material)
+    if fresh:                  # a newly written lesson for "Back to the lesson"
+        key = "fresh:" + key
+    collect_lesson()           # keep a finished one before starting the next
     running = ss.get("lesson_prefetch")
-    if key in ss.profile.get("lessons", {}):
+    if not fresh and key in ss.profile.get("lessons", {}):
         return
+    if fresh and (ss.get("fresh_plan") or {}).get("key") == key:
+        return                                  # already written, waiting
     if running and running["thread"].is_alive():
         return                                  # one background lesson at a time
     if running and running["key"] == key and running["box"].get("plan"):
@@ -640,7 +645,9 @@ def collect_lesson(key: str | None = None) -> None:
             return
         with st.spinner("Finishing your lesson…"):
             running["thread"].join()
-    if running["box"].get("plan"):
+    if running["box"].get("plan") and running["key"].startswith("fresh:"):
+        ss.fresh_plan = {"key": running["key"], "plan": running["box"]["plan"]}
+    elif running["box"].get("plan"):
         ss.profile.setdefault("lessons", {})[running["key"]] = running["box"]["plan"]
     elif running["key"] == key:
         # Say why the lesson is written again now, instead of failing silently.
@@ -660,9 +667,15 @@ def start_level(fresh: bool = False) -> None:
     material = ss.material
     saved = ss.profile.setdefault("lessons", {})
     key = lesson_key(ss.concept, ss.level, material)
+    plan = None
     if not fresh:
         collect_lesson(key)
-    plan = None if fresh else saved.get(key)
+        plan = saved.get(key)
+    else:      # written in the background after the first miss, if it is ready
+        collect_lesson("fresh:" + key)
+        ready = ss.pop("fresh_plan", None)
+        if ready and ready["key"] == "fresh:" + key:
+            plan = saved[key] = ready["plan"]
     if plan is None:
         plan = call(tutor.lesson_plan, material, ss.concept, ss.level,
                     figures.options(ss.concept),
@@ -873,6 +886,80 @@ def next_question() -> None:
     ss.stage = "question"
 
 
+def needs_homework_gate(action: str) -> bool:
+    """Open homework first? Ask once before new material (a new session, the
+    next level, another round) and every time before even more homework, so
+    assignments do not pile up. Saying "continue" holds for the rest of the day."""
+    todo = homework.open_assignments(ss.profile)
+    if not todo:
+        return False
+    if action != "homework" and ss.get("hw_ok") == today():
+        return False
+    return True
+
+
+def ask_homework_gate(action: str, **data) -> None:
+    ss.gate = {"action": action, **data}
+    st.rerun()
+
+
+def run_action(action: str, data: dict) -> None:
+    """Do what the learner asked for before the homework question came up."""
+    if action == "start":
+        begin_session(data["concept"], data["material"])
+    elif action == "level":
+        ss.level += 1
+        start_level()
+    elif action == "keep":
+        begin_session(data["concept"], data["material"], keep_gaps=True)
+    elif action == "homework":
+        make_homework()
+
+
+def make_homework() -> None:
+    try:
+        with st.spinner("Preparing your homework (checking every link)…"):
+            ss.homework = homework.create(ss.profile, ss.concept,
+                                          concept_title(ss.concept),
+                                          ss.material, ss.session_weak)
+    except Exception as exc:
+        ss.homework = {}
+        ss.homework_error = str(exc)
+
+
+def homework_gate() -> None:
+    """The question itself, shown instead of the Study page while it is open."""
+    gate, todo = ss.gate, homework.open_assignments(ss.profile)
+    with st.container(border=True):
+        st.subheader(f"📚 You have {len(todo)} open homework")
+        for a in todo:
+            st.markdown(f"- **#{a['id']} · {concept_title(a['concept'])}** · given "
+                        f"{a['created']}")
+        if gate["action"] == "homework":
+            st.write("A new homework now would make it "
+                     f"{len(todo) + 1}. Finishing the open ones first keeps them "
+                     "from piling up.")
+            first, second = "Finish without new homework", "Give me one more anyway"
+        else:
+            st.write("Do you want to check your homework before you go on? Open "
+                     "homework that waits too long piles up.")
+            first, second = "Check my homework first", "Continue without it"
+        c1, c2 = st.columns(2)
+        if c1.button(first, type="primary", width="stretch", key="gate_first"):
+            ss.gate = None
+            if gate["action"] == "homework":
+                ss.homework, ss.homework_skipped = {}, True
+            else:
+                ss.stage = "start"          # the homework cards are at the top there
+            st.rerun()
+        if c2.button(second, width="stretch", key="gate_second"):
+            ss.gate = None
+            if gate["action"] != "homework":
+                ss.hw_ok = today()
+            run_action(gate["action"], gate)
+            st.rerun()
+
+
 def welcome_back() -> None:
     """Session start: what is waiting for the learner before new material -
     homework to check and spaced-repetition reviews that are due."""
@@ -980,7 +1067,9 @@ def check_homework() -> None:
 
 
 with tab_study:
-    if ss.stage == "start":
+    if ss.get("gate"):
+        homework_gate()
+    elif ss.stage == "start":
         welcome_back()
         st.subheader("Start a session")
         st.write("One idea at a time: a short lesson, then questions that climb "
@@ -1017,6 +1106,8 @@ with tab_study:
                 st.warning("Please paste at least 200 characters of material "
                            "(no API call was made).")
                 st.stop()
+            if needs_homework_gate("start"):
+                ask_homework_gate("start", concept=concept, material=material)
             begin_session(concept, material)
             st.rerun()
 
@@ -1121,6 +1212,11 @@ with tab_study:
                     prefetch_question()      # ready by the time feedback is read
             if action == "level":
                 prefetch_lesson(ss.concept, ss.level + 1)   # next level's lesson
+            if (action == "question" and not ss.result["correct"]
+                    and ss.wrong_this_level == MAX_WRONG_PER_LEVEL - 1):
+                # One more miss sends the learner back to a new lesson: start
+                # writing it now, so "Back to the lesson" has nothing to wait for.
+                prefetch_lesson(ss.concept, ss.level, fresh=True)
 
             go, stop = st.columns([2, 1])
             if action != "mastered" and stop.button("Finish for today", width="stretch"):
@@ -1141,6 +1237,8 @@ with tab_study:
                         ss.end_reason += " 🔓 Unlocked: " + ", ".join(
                             curriculum.BY_ID[o]["title"] for o in opened) + "."
                 elif action == "level":
+                    if needs_homework_gate("level"):
+                        ask_homework_gate("level")
                     ss.level += 1
                     start_level()
                 else:
@@ -1165,19 +1263,21 @@ with tab_study:
                 if col1.button(f"Keep going with {concept_title(nxt)}", width="stretch"):
                     material = (curriculum.material(nxt) if nxt in curriculum.BY_ID
                                 else ss.material)
+                    if needs_homework_gate("keep"):
+                        ask_homework_gate("keep", concept=nxt, material=material)
                     begin_session(nxt, material, keep_gaps=True)
                     st.rerun()
                 if col2.button("Done for today - give me homework", type="primary",
                                width="stretch"):
-                    try:
-                        with st.spinner("Preparing your homework (checking every link)…"):
-                            ss.homework = homework.create(ss.profile, ss.concept,
-                                                          concept_title(ss.concept),
-                                                          ss.material, ss.session_weak)
-                        st.rerun()
-                    except Exception as exc:
-                        ss.homework = {}
-                        st.warning(f"Could not prepare homework this time: {exc}")
+                    if needs_homework_gate("homework"):
+                        ask_homework_gate("homework")
+                    make_homework()
+                    st.rerun()
+            if ss.pop("homework_error", None):
+                st.warning("Could not prepare homework this time.")
+            if ss.get("homework_skipped") and ss.homework == {}:
+                st.info("No new homework this time - your open homework is waiting at "
+                        "the top of the Study tab.")
             if ss.homework:
                 st.subheader("📚 Your homework")
                 show_assignment(ss.homework)
@@ -1187,7 +1287,7 @@ with tab_study:
                          "Your progress is in the 🗂️ **My progress** tab - download "
                          "it to keep it.")
                 if st.button("Start a new session"):
-                    ss.stage = "start"
+                    ss.stage, ss.homework_skipped = "start", False
                     st.rerun()
 
 
