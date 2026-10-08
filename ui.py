@@ -9,6 +9,7 @@ as many cards per row as there is room for and wraps the rest.
 """
 
 from html import escape
+from urllib.parse import quote
 
 import streamlit as st
 
@@ -26,6 +27,8 @@ _CSS = """<style>
 .qsa-bar{display:flex;gap:3px;margin:.35rem 0 .15rem 0;}
 .qsa-bar span{flex:1;height:6px;border-radius:3px;background:rgba(128,128,128,.3);}
 .qsa-bar span.on{background:#3987e5;}
+.qsa-links{margin-top:.35rem;font-size:.8rem;display:flex;gap:.6rem;flex-wrap:wrap;}
+.qsa-links a{text-decoration:none;border:1px solid rgba(128,128,128,.4);border-radius:1rem;padding:.05rem .55rem;}
 </style>"""
 
 
@@ -43,7 +46,8 @@ def _bar(done: int, total: int) -> str:
 def cards(items: list[dict], min_px: int = 150) -> None:
     """A wrapping grid of small cards. Each item may have: top (small caps
     line), title, value (big number), bar=(done, total), sub (grey line),
-    highlight (blue frame), dim (faded). All text is escaped."""
+    highlight (blue frame), dim (faded), links=[(label, url), ...]. All text
+    is escaped."""
     parts = []
     for it in items:
         cls = "qsa-card" + (" qsa-hi" if it.get("highlight") else "") + \
@@ -59,6 +63,11 @@ def cards(items: list[dict], min_px: int = 150) -> None:
             inner += _bar(*it["bar"])
         if it.get("sub"):
             inner += f'<div class="qsa-sub">{escape(str(it["sub"]))}</div>'
+        if it.get("links"):
+            inner += '<div class="qsa-links">' + "".join(
+                f'<a href="{escape(href, quote=True)}" target="_blank" '
+                f'rel="noopener noreferrer">{escape(label)}</a>'
+                for label, href in it["links"]) + "</div>"
         parts.append(f'<div class="{cls}">{inner}</div>')
     st.markdown(f'<div class="qsa-grid" style="--qsa-min:{min_px}px">'
                 + "".join(parts) + "</div>", unsafe_allow_html=True)
@@ -70,3 +79,20 @@ def stats(items: list[tuple], min_px: int = 120) -> None:
     for t in items:
         tiles.append({"top": t[0], "value": t[1], "sub": t[2] if len(t) > 2 else None})
     cards(tiles, min_px)
+
+
+def share_links(text: str) -> list[tuple]:
+    """Ready-made share links (they open the site's own post window with the
+    text filled in; nothing is posted until the learner presses Post)."""
+    t = quote(text)
+    return [("🔗 LinkedIn", f"https://www.linkedin.com/feed/?shareActive=true&text={t}"),
+            ("𝕏 Post", f"https://x.com/intent/post?text={t}")]
+
+
+def explain(points: list[str], tries: list[str] | None = None) -> None:
+    """A short "what this means" box under a lab, plus small challenges."""
+    with st.container(border=True):
+        st.markdown("**💡 What this means**\n\n" + "\n".join(f"- {p}" for p in points))
+    if tries:
+        with st.expander("🎯 Try this"):
+            st.markdown("\n".join(f"{i}. {t}" for i, t in enumerate(tries, 1)))

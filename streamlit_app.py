@@ -479,6 +479,7 @@ with tab_explore:
         show_numbers(rho)
         st.plotly_chart(qv.matrix_figure(rho, f"ρ = |ψ⟩⟨ψ| for {name}"),
                         width="stretch")
+        ui.explain(labs.pure_insight(rho, name), labs.TRIES["pure"])
 
     elif mode == "Gate circuit":
         labs.circuit_lab()
@@ -505,6 +506,7 @@ with tab_explore:
                 {"rho": rho, "label": "mixture", "color": qv.COLOR_MIX},
             ], chord=True), width="stretch")
         show_numbers(rho)
+        ui.explain(labs.mix_insight(p, rho_a, rho_b, rho), labs.TRIES["mix"])
         with st.expander("The three density matrices"):
             st.plotly_chart(qv.matrix_figure(rho, f"Mixture (p = {p:.2f})"),
                             width="stretch")
@@ -1206,8 +1208,12 @@ with tab_profile:
         st.progress(1.0, text="Top level reached.")
     st.markdown("**Badges**")
     ui.cards([{"title": f"{b['badge']} {b['name']}" if b["earned"] else f"🔒 {b['name']}",
-               "sub": "earned" if b["earned"] else b["how"], "dim": not b["earned"]}
-              for b in rewards.badges(ss.profile)], min_px=150)
+               "sub": "earned" if b["earned"] else b["how"], "dim": not b["earned"],
+               "links": ui.share_links(
+                   f"I just earned the {b['badge']} {b['name']} badge on Quantum Study "
+                   "Agent, a study agent for quantum computing built on NVIDIA "
+                   f"Nemotron. {store.APP_URL}") if b["earned"] else None}
+              for b in rewards.badges(ss.profile)], min_px=170)
 
     if ss.get("user_id"):
         with st.expander("✏️ Edit my name"):
