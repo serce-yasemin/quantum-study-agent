@@ -1,0 +1,15 @@
+# Look and feel of the web app (no secrets here - those live in secrets.toml,
+# which is never committed).
+
+[client]
+# Hide the developer toolbar items (Deploy, Rerun, settings) for visitors.
+toolbarMode = "minimal"
+
+# One accent color for buttons, sliders and tabs, matching the blue used in
+# the pictures and cards. Set for both modes so the app still follows the
+# visitor's light or dark setting.
+[theme.light]
+primaryColor = "#2a78d6"
+
+[theme.dark]
+primaryColor = "#3987e5"
