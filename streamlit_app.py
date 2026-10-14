@@ -232,6 +232,8 @@ def load_resume() -> None:
             ss.material = curriculum.material(ss.concept)
         # JSON turns the card numbers into text; turn them back.
         ss.simpler = {int(k): v for k, v in (snap.get("simpler") or {}).items()}
+        if not 1 <= int(ss.level) <= profile_store.MAX_LEVEL:
+            raise ValueError("level out of range")   # an old, broken snapshot
         ss.homework = None
         ss.resumed = True
     except Exception:                         # a damaged snapshot must never
@@ -639,6 +641,14 @@ def call(fn, *args, label: str = "Nemotron is thinking…"):
         st.stop()
 
 
+def session_level(c: dict) -> int:
+    """The level a new session opens at: one above the last level passed,
+    never above the top level. A mastered step that got a wrong answer in a
+    later review is back to "review" but still has level 3, so it reopens
+    at level 3 instead of a level 4 that does not exist."""
+    return max(1, min(profile_store.MAX_LEVEL, c.get("level", 0) + 1))
+
+
 def begin_session(concept: str, material: str, keep_gaps: bool = False) -> None:
     """Start a session on one concept. It runs until the learner stops it."""
     ss.concept, ss.material = concept, material
@@ -649,7 +659,7 @@ def begin_session(concept: str, material: str, keep_gaps: bool = False) -> None:
     if concept in curriculum.BY_ID:
         c["prerequisites"] = curriculum.BY_ID[concept]["prerequisites"]
     ss.was_mastered = c["level"] >= profile_store.MAX_LEVEL
-    ss.level = profile_store.MAX_LEVEL if c["status"] == "mastered" else c["level"] + 1
+    ss.level = session_level(c)
     ss.asked = []
     start_level()
 
@@ -978,7 +988,7 @@ def run_action(action: str, data: dict) -> None:
     if action == "start":
         begin_session(data["concept"], data["material"])
     elif action == "level":
-        ss.level += 1
+        ss.level = min(profile_store.MAX_LEVEL, ss.level + 1)
         start_level()
     elif action == "keep":
         begin_session(data["concept"], data["material"], keep_gaps=True)
@@ -1156,8 +1166,7 @@ with tab_study:
         # Start writing that lesson now, while the learner reads this page.
         collect_lesson()
         _rec = ss.profile.get("concepts", {}).get(rec_id, {})
-        prefetch_lesson(rec_id, profile_store.MAX_LEVEL if _rec.get("status") == "mastered"
-                        else _rec.get("level", 0) + 1)
+        prefetch_lesson(rec_id, session_level(_rec))
 
         skip = st.toggle("Let me pick any step (skip ahead)",
                          help="Locked steps open when the step before them is "
@@ -1312,7 +1321,7 @@ with tab_study:
                 elif action == "level":
                     if needs_homework_gate("level"):
                         ask_homework_gate("level")
-                    ss.level += 1
+                    ss.level = min(profile_store.MAX_LEVEL, ss.level + 1)
                     start_level()
                 else:
                     next_question()
