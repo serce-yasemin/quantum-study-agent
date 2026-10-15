@@ -641,6 +641,36 @@ def call(fn, *args, label: str = "Nemotron is thinking…"):
         st.stop()
 
 
+GAPS_SHOWN = 3
+
+
+def profile_card(rec: dict, title: str, right: int, total: int) -> dict:
+    """One step of the learner profile as a card: one fact per line and the
+    gaps as a short list (newest first), so nothing runs together."""
+    status = {"mastered": "mastered", "review": "needs review",
+              "learning": "learning"}.get(rec.get("status"), "")
+    rows = [("Correct answers", f"{right} / {total}" if total else "not started")]
+    due = rec.get("next_review")
+    if due:
+        try:
+            d = date.fromisoformat(due)
+            late = d <= today()
+            rows.append(("Next review", d.strftime("%d %b") + (" · due now" if late else ""),
+                         late))
+        except ValueError:
+            rows.append(("Next review", due))
+    weak = list(dict.fromkeys(h["weak_point"].strip() for h in reversed(rec["history"])
+                              if h.get("weak_point")))
+    card = {"top": f"Level {rec['level']}/3" + (f" · {status}" if status and total else ""),
+            "title": title, "bar": (rec["level"], 3), "rows": rows}
+    if weak:
+        card.update(list_title="Gaps to work on",
+                    list=[w[:1].upper() + w[1:] for w in weak[:GAPS_SHOWN]])
+        if len(weak) > GAPS_SHOWN:
+            card["more"] = f"+{len(weak) - GAPS_SHOWN} older"
+    return card
+
+
 def session_level(c: dict) -> int:
     """The level a new session opens at: one above the last level passed,
     never above the top level. A mastered step that got a wrong answer in a
@@ -1435,13 +1465,7 @@ with tab_profile:
             total = len(rec["history"])
             right = sum(h["correct"] for h in rec["history"])
             title = curriculum.BY_ID[name]["title"] if name in curriculum.BY_ID else name
-            weak = [h["weak_point"] for h in rec["history"] if h["weak_point"]]
-            sub = (f"answers correct {right}/{total} · next review "
-                   f"{rec['next_review'] or '—'}")
-            if weak:
-                sub += " · gaps: " + "; ".join(dict.fromkeys(weak))
-            items.append({"top": f"level {rec['level']}/3", "title": title,
-                          "bar": (rec["level"], 3), "sub": sub})
+            items.append(profile_card(rec, title, right, total))
         ui.cards(items, min_px=260)
     else:
         st.caption("No sessions yet.")

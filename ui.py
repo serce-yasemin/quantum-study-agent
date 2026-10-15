@@ -27,6 +27,17 @@ _CSS = """<style>
 .qsa-bar{display:flex;gap:3px;margin:.35rem 0 .15rem 0;}
 .qsa-bar span{flex:1;height:6px;border-radius:3px;background:rgba(128,128,128,.3);}
 .qsa-bar span.on{background:#3987e5;}
+.qsa-rows{margin:.35rem 0 .1rem 0;font-size:.85rem;}
+.qsa-row{display:flex;justify-content:space-between;gap:.75rem;padding:.12rem 0;
+  border-bottom:1px solid rgba(128,128,128,.18);}
+.qsa-row:last-child{border-bottom:none;}
+.qsa-row span:first-child{opacity:.7;}
+.qsa-row span:last-child{font-weight:600;text-align:right;}
+.qsa-row .qsa-due{color:#d97706;}
+.qsa-ltitle{font-size:.75rem;opacity:.7;margin:.5rem 0 .15rem 0;letter-spacing:.02em;}
+.qsa-list{margin:0;padding-left:1.1rem;font-size:.85rem;}
+.qsa-list li{margin:.1rem 0;font-size:.85rem !important;line-height:1.35;}
+.qsa-more{font-size:.75rem;opacity:.6;margin-top:.1rem;}
 .qsa-links{margin-top:.35rem;font-size:.8rem;display:flex;gap:.6rem;flex-wrap:wrap;}
 .qsa-links a{text-decoration:none;border:1px solid rgba(128,128,128,.4);border-radius:1rem;padding:.05rem .55rem;}
 </style>"""
@@ -45,9 +56,10 @@ def _bar(done: int, total: int) -> str:
 
 def cards(items: list[dict], min_px: int = 150) -> None:
     """A wrapping grid of small cards. Each item may have: top (small caps
-    line), title, value (big number), bar=(done, total), sub (grey line),
-    highlight (blue frame), dim (faded), links=[(label, url), ...]. All text
-    is escaped."""
+    line), title, value (big number), bar=(done, total), rows=[(label,
+    value, warn?), ...] (one fact per line), list + list_title + more (a
+    short bullet list), sub (grey line), highlight (blue frame), dim (faded),
+    links=[(label, url), ...]. All text is escaped."""
     parts = []
     for it in items:
         cls = "qsa-card" + (" qsa-hi" if it.get("highlight") else "") + \
@@ -61,6 +73,18 @@ def cards(items: list[dict], min_px: int = 150) -> None:
             inner += f'<div class="qsa-value">{escape(str(it["value"]))}</div>'
         if it.get("bar"):
             inner += _bar(*it["bar"])
+        if it.get("rows"):
+            inner += '<div class="qsa-rows">' + "".join(
+                f'<div class="qsa-row"><span>{escape(str(r[0]))}</span>'
+                f'<span class="{"qsa-due" if len(r) > 2 and r[2] else ""}">'
+                f'{escape(str(r[1]))}</span></div>' for r in it["rows"]) + "</div>"
+        if it.get("list"):
+            if it.get("list_title"):
+                inner += f'<div class="qsa-ltitle">{escape(str(it["list_title"]))}</div>'
+            inner += '<ul class="qsa-list">' + "".join(
+                f"<li>{escape(str(x))}</li>" for x in it["list"]) + "</ul>"
+            if it.get("more"):
+                inner += f'<div class="qsa-more">{escape(str(it["more"]))}</div>'
         if it.get("sub"):
             inner += f'<div class="qsa-sub">{escape(str(it["sub"]))}</div>'
         if it.get("links"):
