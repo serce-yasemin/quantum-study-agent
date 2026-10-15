@@ -542,6 +542,25 @@ def concept_record():
 
 
 OWN = "✍️ My own material"
+MAX_OWN_CHARS = 6000   # every model call sends the whole text: keep it to 1-2 pages
+
+
+def own_material_problem(concept: str, material: str) -> str | None:
+    """What is wrong with a learner's own topic, or None. A name that is
+    empty would save progress under a blank card; a name that matches a
+    learning-path step would mix the pasted text into that step's progress,
+    pictures and homework."""
+    if not concept:
+        return "Please give your topic a name."
+    taken = {s["id"].lower() for s in curriculum.PATH} | \
+            {s["title"].lower() for s in curriculum.PATH}
+    if concept.lower() in taken:
+        return (f"'{concept}' is already a step of the learning path. "
+                "Please pick another name for your own topic.")
+    if len(material) > MAX_OWN_CHARS:
+        return (f"Please keep your material under {MAX_OWN_CHARS:,} characters "
+                f"(it has {len(material):,}).")
+    return None
 ICONS = {"locked": "🔒", "new": "⬜", "learning": "📘",
          "review_due": "🔁", "mastered": "✅"}
 LABELS = {"locked": "locked", "new": "not started", "learning": "in progress",
@@ -1207,16 +1226,20 @@ with tab_study:
             "What do you want to study?", options, index=options.index(rec_id),
             format_func=lambda c: c if c == OWN else curriculum.BY_ID[c]["title"])
         if choice == OWN:
-            concept = st.text_input("Concept name", "my_topic")
+            concept = st.text_input("Concept name", "my_topic", max_chars=60).strip()
             material = st.text_area("Paste a paragraph from a paper or lecture notes",
-                                    height=180).strip()
+                                    height=180, max_chars=MAX_OWN_CHARS,
+                                    help=f"200 to {MAX_OWN_CHARS:,} characters "
+                                         "(about one or two pages).").strip()
         else:
             concept, material = choice, curriculum.material(choice)
 
         if st.button("Start session", type="primary"):
-            if len(material) < 200:
-                st.warning("Please paste at least 200 characters of material "
-                           "(no API call was made).")
+            problem = own_material_problem(concept, material) if choice == OWN else None
+            if problem is None and len(material) < 200:
+                problem = "Please paste at least 200 characters of material."
+            if problem:
+                st.warning(problem + " (No API call was made.)")
                 st.stop()
             if needs_homework_gate("start"):
                 ask_homework_gate("start", concept=concept, material=material)
